@@ -28,12 +28,15 @@ export const bus: EventEmitter =
 
 /**
  * Conexión dedicada que escucha el canal. Si la base usa un "pooler" en modo transacción
- * (Neon/Supabase), define DATABASE_URL_DIRECT con la conexión directa: LISTEN no funciona a través del pooler.
+ * (Neon/Supabase), hace falta la conexión directa (DATABASE_URL_DIRECT o DATABASE_URL_UNPOOLED):
+ * LISTEN no funciona a través del pooler.
  */
 export function ensureListener() {
   if (globalThis.__mesaListener?.started) return;
   globalThis.__mesaListener = { started: true };
-  const connectionString = process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL;
+  // DATABASE_URL_UNPOOLED es el nombre que pone la integración de Neon en Vercel.
+  const connectionString =
+    process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
   if (!connectionString) return;
 
   const connect = () => {

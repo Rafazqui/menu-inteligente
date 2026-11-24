@@ -28,7 +28,8 @@ export class UploadError extends Error {}
 
 /** Guarda el archivo en PostgreSQL (tabla files) para que cualquier servidor pueda servirlo. */
 export async function saveUpload(file: File, kind: "pdf" | "image", restaurantId: number): Promise<string> {
-  const maxMb = kind === "pdf" ? 20 : 6;
+  // Vercel no acepta peticiones de más de 4.5 MB; en otros servidores se permite más.
+  const maxMb = process.env.VERCEL ? 4 : kind === "pdf" ? 20 : 6;
   if (file.size === 0) throw new UploadError("El archivo está vacío.");
   if (file.size > maxMb * 1024 * 1024) throw new UploadError(`El archivo supera ${maxMb} MB.`);
   const buf = Buffer.from(await file.arrayBuffer());

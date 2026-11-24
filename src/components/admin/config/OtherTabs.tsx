@@ -40,7 +40,10 @@ export function MenuTab({ data, reload }: { data: ConfigData; reload: () => void
         <FileUp size={18} /> {uploading ? "Subiendo…" : url ? "Reemplazar PDF" : "Subir PDF"}
         <input type="file" accept="application/pdf" className="sr-only" onChange={upload} disabled={uploading} />
       </label>
-      <p className="text-xs text-muted">Máximo 20 MB. Consejo: exporta el PDF optimizado para web para que cargue rápido.</p>
+      <p className="text-xs text-muted">
+        Máximo 4 MB. Consejo: exporta el PDF optimizado para web (o comprímelo en ilovepdf.com) para que cargue rápido en
+        los celulares.
+      </p>
     </Section>
   );
 }

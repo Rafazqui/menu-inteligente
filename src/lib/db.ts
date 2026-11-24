@@ -46,14 +46,23 @@ export function ready(): Promise<void> {
   return globalThis.__mesaReady;
 }
 
+/**
+ * Todo en UNA transacción con bloqueo de transacción (pg_advisory_xact_lock): se libera solo al
+ * terminar, así funciona también detrás de un "pooler" (Neon/Vercel), donde un bloqueo de sesión
+ * podría quedarse tomado en otra conexión y congelar la app.
+ */
 async function init() {
   const c = await pool().connect();
   try {
-    await c.query("SELECT pg_advisory_lock($1)", [SCHEMA_LOCK_ID]);
+    await c.query("BEGIN");
+    await c.query("SELECT pg_advisory_xact_lock($1)", [SCHEMA_LOCK_ID]);
     await c.query(SCHEMA_SQL);
     await seedIfEmpty(c);
+    await c.query("COMMIT");
+  } catch (e) {
+    await c.query("ROLLBACK").catch(() => {});
+    throw e;
   } finally {
-    await c.query("SELECT pg_advisory_unlock($1)", [SCHEMA_LOCK_ID]).catch(() => {});
     c.release();
   }
 }
@@ -108,14 +117,14 @@ export function randomToken(len = 12): string {
   return out;
 }
 
+/** Datos de ejemplo si la base está vacía. Se ejecuta dentro de la transacción de init(). */
 async function seedIfEmpty(c: PoolClient) {
   const exists = await c.query("SELECT 1 FROM restaurants LIMIT 1");
   if (exists.rowCount) return;
   // Al migrar desde SQLite no se deben crear datos de ejemplo.
   if (process.env.NO_SEED === "1") return;
 
-  await c.query("BEGIN");
-  try {
+  {
     const r = await c.query<{ id: number }>(
       `INSERT INTO restaurants (slug, name, tagline, logo_url, google_review_url, settings)
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
@@ -168,9 +177,5 @@ async function seedIfEmpty(c: PoolClient) {
         [rid, ...g],
       );
     }
-    await c.query("COMMIT");
-  } catch (e) {
-    await c.query("ROLLBACK").catch(() => {});
-    throw e;
   }
 }

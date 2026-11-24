@@ -27,6 +27,8 @@ export async function send(url: string, body: object | FormData): Promise<string
   }).catch(() => null);
   if (!res) return "Sin conexión.";
   if (res.ok) return null;
+  // El hosting rechaza archivos grandes antes de llegar a la app (Vercel: 4.5 MB).
+  if (res.status === 413) return "El archivo es demasiado grande. Usa uno de máximo 4 MB (comprime el PDF o la imagen).";
   const data = await res.json().catch(() => null);
   return data?.error ?? "No se pudo guardar.";
 }

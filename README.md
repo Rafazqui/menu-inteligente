@@ -25,7 +25,20 @@ npm run dev          # Terminal 2: la app en http://localhost:3000
 
 La primera vez, `db:local` crea la base en `data/postgres` y el archivo `.env.local` apuntando a ella.
 
-### Producción o base en la nube
+### Publicar en Vercel
+
+1. En tu proyecto de Vercel: **Storage → Create Database → Neon (Postgres)** y conéctala al proyecto. Vercel agrega solo `DATABASE_URL` y `DATABASE_URL_UNPOOLED`.
+2. **Deployments → ⋯ → Redeploy** para que la app tome las variables.
+3. Para subir tus datos actuales a Neon, desde tu PC (usa la cadena **sin** `-pooler`, en Storage → tu base → `.env.local`):
+   ```powershell
+   $env:DATABASE_URL_DIRECT="postgresql://...neon.tech/neondb?sslmode=require"
+   npm.cmd run db:migrar -- --reemplazar
+   ```
+   (`--reemplazar` borra los datos de ejemplo que la app crea al arrancar con la base vacía.)
+
+Límites en Vercel: archivos de máximo **4 MB**; las alertas en vivo se reconectan solas cada pocos minutos (normal en Vercel) y el panel además consulta cada 20 s como respaldo.
+
+### Producción o base en la nube (otro hosting)
 
 1. Crea una base PostgreSQL (por ejemplo gratis en [Neon](https://neon.tech) o en Railway).
 2. Copia `.env.example` como `.env.local` (o configura las variables en tu hosting) y pega tu cadena de conexión en `DATABASE_URL`.

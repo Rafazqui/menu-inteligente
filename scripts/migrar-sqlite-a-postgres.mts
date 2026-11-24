@@ -41,7 +41,9 @@ function sniff(buf: Buffer): string | null {
   return null;
 }
 
-const connectionString = process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL;
+// Preferimos la conexión directa (sin pooler): una migración larga funciona mejor así.
+const connectionString =
+  process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
 if (!connectionString) die("Falta DATABASE_URL. Ponla en .env.local (ver README).");
 if (!fs.existsSync(SQLITE_PATH)) die(`No encontré la base SQLite en ${SQLITE_PATH}`);
 
@@ -52,20 +54,21 @@ console.log(`Origen : ${SQLITE_PATH}`);
 console.log(`Destino: PostgreSQL ${client.host}:${client.port}/${client.database}\n`);
 
 try {
-  // 1) Esquema
-  await client.query("SELECT pg_advisory_lock($1)", [SCHEMA_LOCK_ID]);
+  // 1) Esquema (todo dentro de la transacción; el bloqueo se libera solo al terminar)
+  await client.query("BEGIN");
+  await client.query("SELECT pg_advisory_xact_lock($1)", [SCHEMA_LOCK_ID]);
   await client.query(SCHEMA_SQL);
 
   // 2) No pisar datos sin permiso
   const has = await client.query("SELECT COUNT(*)::int AS n FROM restaurants");
   if (has.rows[0].n > 0 && !REPLACE) {
+    await client.query("ROLLBACK");
     die(
       "PostgreSQL ya tiene datos. Si quieres borrarlos y migrar de nuevo desde SQLite, ejecuta:\n" +
         "    npm run db:migrar -- --reemplazar",
     );
   }
 
-  await client.query("BEGIN");
   if (REPLACE) {
     await client.query(
       `TRUNCATE requests, reward_plays, prizes, board_games, table_sessions, staff, tables, files, app_secrets, restaurants
@@ -170,7 +173,6 @@ try {
   console.error(e);
   process.exitCode = 1;
 } finally {
-  await client.query("SELECT pg_advisory_unlock($1)", [SCHEMA_LOCK_ID]).catch(() => {});
   await client.end();
   lite.close();
 }

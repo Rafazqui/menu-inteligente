@@ -61,7 +61,7 @@ export default function MeseroPage() {
 
         <div className="card p-4 space-y-3">
           <label htmlFor="msg" className="text-sm font-semibold">
-            ¿Necesitas algo en específico? <span className="text-muted font-normal">(opcional)</span>
+            ¿Necesitas algo en específico? o que <span className="text-muted font-normal">(opcional)</span>
           </label>
           <textarea
             id="msg"

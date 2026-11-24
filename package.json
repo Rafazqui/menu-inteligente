@@ -9,7 +9,8 @@
     "lint": "eslint",
     "postinstall": "node scripts/copy-pdf-worker.mjs",
     "typecheck": "next typegen && tsc --noEmit",
-    "db:migrar": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env.local scripts/migrar-sqlite-a-postgres.mts"
+    "db:migrar": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env.local scripts/migrar-sqlite-a-postgres.mts",
+    "db:local": "node scripts/db-local.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -32,6 +33,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "better-sqlite3": "^13.2.0",
+    "embedded-postgres": "17.12.0-beta.19",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",

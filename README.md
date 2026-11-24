@@ -15,14 +15,21 @@ El personal usa el **panel en vivo** (`/admin`): alertas con sonido, mapa de mes
 
 La app usa **PostgreSQL**, así puede correr en uno o varios servidores a la vez.
 
-1. Crea una base PostgreSQL (por ejemplo gratis en [Neon](https://neon.tech) o en Railway).
-2. Copia `.env.example` como `.env.local` y pega tu cadena de conexión en `DATABASE_URL`.
-3. Arranca:
+### Desarrollo (PostgreSQL local, sin instalar nada)
 
 ```bash
 npm install
-npm run dev          # http://localhost:3000
+npm run db:local     # Terminal 1: arranca PostgreSQL local (déjala abierta)
+npm run dev          # Terminal 2: la app en http://localhost:3000
 ```
+
+La primera vez, `db:local` crea la base en `data/postgres` y el archivo `.env.local` apuntando a ella.
+
+### Producción o base en la nube
+
+1. Crea una base PostgreSQL (por ejemplo gratis en [Neon](https://neon.tech) o en Railway).
+2. Copia `.env.example` como `.env.local` (o configura las variables en tu hosting) y pega tu cadena de conexión en `DATABASE_URL`.
+3. `npm run build` y `npm start`.
 
 Si la base está vacía, la app crea sola las tablas y los datos de ejemplo de HR Coffee.
 

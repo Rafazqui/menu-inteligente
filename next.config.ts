@@ -8,7 +8,7 @@ const devOrigins = (process.env.DEV_ORIGINS ?? "")
   .filter(Boolean);
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["better-sqlite3"],
+  serverExternalPackages: ["pg"],
   allowedDevOrigins: devOrigins,
   turbopack: {
     rules: {

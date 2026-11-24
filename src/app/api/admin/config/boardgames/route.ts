@@ -1,5 +1,5 @@
 import { requireStaff } from "@/lib/admin";
-import { db } from "@/lib/db";
+import { exec, q1 } from "@/lib/db";
 import { fail, ok } from "@/lib/http";
 import { deleteUpload, saveUpload, UploadError } from "@/lib/uploads";
 
@@ -18,18 +18,18 @@ export async function POST(req: Request) {
   } catch {
     return fail(400, "Formulario inválido.");
   }
-  const d = db();
   const rid = user.restaurant_id;
   const id = Number(form.get("id")) || null;
   const existing = id
-    ? (d.prepare("SELECT * FROM board_games WHERE id = ? AND restaurant_id = ?").get(id, rid) as
-        | { cover_file: string | null; back_file: string | null }
-        | undefined)
+    ? await q1<{ cover_file: string | null; back_file: string | null }>(
+        "SELECT cover_file, back_file FROM board_games WHERE id = $1 AND restaurant_id = $2",
+        [id, rid],
+      )
     : undefined;
   if (id && !existing) return fail(404, "Juego no encontrado.");
 
   if (form.get("action") === "delete" && id) {
-    d.prepare("DELETE FROM board_games WHERE id = ?").run(id);
+    await exec("DELETE FROM board_games WHERE id = $1", [id]);
     await deleteUpload(existing?.cover_file);
     await deleteUpload(existing?.back_file);
     return ok();
@@ -49,13 +49,13 @@ export async function POST(req: Request) {
   try {
     const c = form.get("cover");
     if (c instanceof File && c.size > 0) {
-      const n = await saveUpload(c, "image");
+      const n = await saveUpload(c, "image", rid);
       await deleteUpload(cover);
       cover = n;
     }
     const bk = form.get("back");
     if (bk instanceof File && bk.size > 0) {
-      const n = await saveUpload(bk, "image");
+      const n = await saveUpload(bk, "image", rid);
       await deleteUpload(back);
       back = n;
     }
@@ -65,15 +65,18 @@ export async function POST(req: Request) {
   }
 
   if (id) {
-    d.prepare(
-      `UPDATE board_games SET name=?, genre=?, summary=?, min_players=?, max_players=?, minutes=?, available=?, cover_file=?, back_file=?
-       WHERE id = ?`,
-    ).run(name, genre, summary, minP, maxP, minutes, available, cover, back, id);
+    await exec(
+      `UPDATE board_games SET name=$1, genre=$2, summary=$3, min_players=$4, max_players=$5, minutes=$6,
+         available=$7, cover_file=$8, back_file=$9
+       WHERE id = $10`,
+      [name, genre, summary, minP, maxP, minutes, available, cover, back, id],
+    );
   } else {
-    d.prepare(
+    await exec(
       `INSERT INTO board_games (restaurant_id, name, genre, summary, min_players, max_players, minutes, available, cover_file, back_file)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(rid, name, genre, summary, minP, maxP, minutes, available, cover, back);
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [rid, name, genre, summary, minP, maxP, minutes, available, cover, back],
+    );
   }
   return ok();
 }

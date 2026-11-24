@@ -1,5 +1,5 @@
 import { getTableContext } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { q, q1 } from "@/lib/db";
 import { emit } from "@/lib/events";
 import { fail, ok, rateLimit, readJson, sameOrigin } from "@/lib/http";
 import { getSettings } from "@/lib/repo";
@@ -18,50 +18,51 @@ export async function POST(req: Request) {
   const body = await readJson<{ type?: string; message?: string; boardGameId?: number }>(req);
   if (!body) return fail(400, "Solicitud inválida.");
 
-  const d = db();
   const sid = ctx.session.id;
   const rid = ctx.restaurant.id;
 
-  const total = d.prepare("SELECT COUNT(*) AS n FROM requests WHERE session_id = ?").get(sid) as { n: number };
-  if (total.n >= MAX_REQUESTS_PER_SESSION || !rateLimit(`req:${sid}`, 8, 60_000)) {
+  const total = await q1<{ n: number }>("SELECT COUNT(*)::int AS n FROM requests WHERE session_id = $1", [sid]);
+  if ((total?.n ?? 0) >= MAX_REQUESTS_PER_SESSION || !rateLimit(`req:${sid}`, 8, 60_000)) {
     return fail(429, "Demasiadas solicitudes. Espera un momento, por favor.");
   }
 
   if (body.type === "waiter") {
     const message = (body.message ?? "").toString().trim().slice(0, 140) || null;
-    const { waiterCooldownSec } = getSettings(rid);
-    const last = d
-      .prepare(
-        `SELECT CAST((julianday('now') - julianday(created_at)) * 86400 AS INTEGER) AS ago
-         FROM requests WHERE session_id = ? AND type = 'waiter' ORDER BY id DESC LIMIT 1`,
-      )
-      .get(sid) as { ago: number } | undefined;
+    const { waiterCooldownSec } = await getSettings(rid);
+    const last = await q1<{ ago: number }>(
+      `SELECT EXTRACT(EPOCH FROM now() - created_at)::int AS ago
+       FROM requests WHERE session_id = $1 AND type = 'waiter' ORDER BY id DESC LIMIT 1`,
+      [sid],
+    );
     if (last && last.ago < waiterCooldownSec) {
       const wait = waiterCooldownSec - last.ago;
       return fail(429, `Ya avisamos a tu mesero. Podrás llamar de nuevo en ${wait} s.`, { wait });
     }
-    d.prepare(
-      "INSERT INTO requests (restaurant_id, table_id, session_id, type, message) VALUES (?, ?, ?, 'waiter', ?)",
-    ).run(rid, ctx.table.id, sid, message);
+    await q(
+      "INSERT INTO requests (restaurant_id, table_id, session_id, type, message) VALUES ($1, $2, $3, 'waiter', $4)",
+      [rid, ctx.table.id, sid, message],
+    );
     emit(rid, "requests", true);
     return ok({ ok: true });
   }
 
   if (body.type === "boardgame") {
     const gameId = Number(body.boardGameId);
-    const game = d
-      .prepare("SELECT id, name FROM board_games WHERE id = ? AND restaurant_id = ? AND available = 1")
-      .get(gameId, rid) as { id: number; name: string } | undefined;
+    if (!Number.isInteger(gameId)) return fail(404, "Ese juego no está disponible en este momento.");
+    const game = await q1<{ id: number; name: string }>(
+      "SELECT id, name FROM board_games WHERE id = $1 AND restaurant_id = $2 AND available = 1",
+      [gameId, rid],
+    );
     if (!game) return fail(404, "Ese juego no está disponible en este momento.");
-    const dup = d
-      .prepare(
-        "SELECT id FROM requests WHERE session_id = ? AND board_game_id = ? AND status IN ('pending','attending')",
-      )
-      .get(sid, gameId);
+    const dup = await q1(
+      "SELECT id FROM requests WHERE session_id = $1 AND board_game_id = $2 AND status IN ('pending','attending')",
+      [sid, gameId],
+    );
     if (dup) return fail(409, `Ya pediste ${game.name}. Tu mesero va en camino.`);
-    d.prepare(
-      "INSERT INTO requests (restaurant_id, table_id, session_id, type, board_game_id) VALUES (?, ?, ?, 'boardgame', ?)",
-    ).run(rid, ctx.table.id, sid, gameId);
+    await q(
+      "INSERT INTO requests (restaurant_id, table_id, session_id, type, board_game_id) VALUES ($1, $2, $3, 'boardgame', $4)",
+      [rid, ctx.table.id, sid, gameId],
+    );
     emit(rid, "requests", true);
     return ok({ ok: true });
   }

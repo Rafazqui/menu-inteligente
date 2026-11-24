@@ -1,5 +1,5 @@
 import { requireStaff } from "@/lib/admin";
-import { db } from "@/lib/db";
+import { exec } from "@/lib/db";
 import { fail, ok } from "@/lib/http";
 import { getRestaurant } from "@/lib/repo";
 import { deleteUpload, saveUpload, UploadError } from "@/lib/uploads";
@@ -16,9 +16,9 @@ export async function POST(req: Request) {
   }
   if (!(file instanceof File)) return fail(400, "Selecciona un PDF.");
   try {
-    const name = await saveUpload(file, "pdf");
-    const prev = getRestaurant(user.restaurant_id)?.menu_file;
-    db().prepare("UPDATE restaurants SET menu_file = ? WHERE id = ?").run(name, user.restaurant_id);
+    const name = await saveUpload(file, "pdf", user.restaurant_id);
+    const prev = (await getRestaurant(user.restaurant_id))?.menu_file;
+    await exec("UPDATE restaurants SET menu_file = $1 WHERE id = $2", [name, user.restaurant_id]);
     await deleteUpload(prev);
     return ok({ menuFile: name });
   } catch (e) {

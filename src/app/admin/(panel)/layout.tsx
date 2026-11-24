@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function PanelLayout({ children }: LayoutProps<"/admin">) {
   const user = await getStaff();
   if (!user) redirect("/admin/login");
-  const restaurant = getRestaurant(user.restaurant_id)!;
+  const restaurant = (await getRestaurant(user.restaurant_id))!;
   return (
     <div className="print-bg-white min-h-dvh bg-ink">
       <AdminNav name={user.name} role={user.role} restaurant={restaurant.name} />

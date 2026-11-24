@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import QRCode from "qrcode";
 import { getStaff } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { q } from "@/lib/db";
 import { getRestaurant } from "@/lib/repo";
 import { PrintButton } from "@/components/admin/PrintButton";
 
@@ -18,11 +18,12 @@ async function baseUrl(): Promise<string> {
 export default async function QrPage() {
   const user = await getStaff();
   if (user?.role !== "owner") redirect("/admin");
-  const restaurant = getRestaurant(user.restaurant_id)!;
+  const restaurant = (await getRestaurant(user.restaurant_id))!;
   const base = await baseUrl();
-  const tables = db()
-    .prepare("SELECT id, number, area, token FROM tables WHERE restaurant_id = ? AND active = 1 ORDER BY number")
-    .all(user.restaurant_id) as { id: number; number: number; area: string; token: string }[];
+  const tables = await q<{ id: number; number: number; area: string; token: string }>(
+    "SELECT id, number, area, token FROM tables WHERE restaurant_id = $1 AND active = 1 ORDER BY number",
+    [user.restaurant_id],
+  );
 
   const cards = await Promise.all(
     tables.map(async (t) => {

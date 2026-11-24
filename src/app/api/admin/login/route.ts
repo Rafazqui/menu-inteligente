@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { signStaffCookie, STAFF_COOKIE, staffCookieOptions } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { q1 } from "@/lib/db";
 import { clientIp, fail, ok, rateLimit, readJson, sameOrigin } from "@/lib/http";
 
 // Hash de relleno para que el tiempo de respuesta no revele si el usuario existe.
@@ -19,9 +19,10 @@ export async function POST(req: Request) {
     return fail(429, "Demasiados intentos. Espera unos minutos.");
   }
 
-  const user = db()
-    .prepare("SELECT id, password_hash FROM staff WHERE username = ? AND active = 1")
-    .get(username) as { id: number; password_hash: string } | undefined;
+  const user = await q1<{ id: number; password_hash: string }>(
+    "SELECT id, password_hash FROM staff WHERE username = $1 AND active = 1",
+    [username],
+  );
   const valid = await bcrypt.compare(password, user?.password_hash ?? DUMMY_HASH);
   if (!user || !valid) return fail(401, "Usuario o contraseña incorrectos.");
 

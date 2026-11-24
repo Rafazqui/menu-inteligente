@@ -1,5 +1,5 @@
 import { requireStaff } from "@/lib/admin";
-import { db } from "@/lib/db";
+import { exec } from "@/lib/db";
 import { fail, ok, readJson } from "@/lib/http";
 
 /** Crear / editar / borrar premios. `weight` es el peso relativo entre premios. */
@@ -15,11 +15,10 @@ export async function POST(req: Request) {
     active?: boolean;
   }>(req);
   if (!b) return fail(400, "Solicitud inválida.");
-  const d = db();
   const rid = user.restaurant_id;
 
   if (b.action === "delete") {
-    d.prepare("DELETE FROM prizes WHERE id = ? AND restaurant_id = ?").run(Number(b.id), rid);
+    await exec("DELETE FROM prizes WHERE id = $1 AND restaurant_id = $2", [Number(b.id) || 0, rid]);
     return ok();
   }
 
@@ -33,14 +32,15 @@ export async function POST(req: Request) {
   const active = b.active === false ? 0 : 1;
 
   if (b.id) {
-    const r = d
-      .prepare("UPDATE prizes SET name = ?, weight = ?, stock = ?, active = ? WHERE id = ? AND restaurant_id = ?")
-      .run(name, weight, stock, active, Number(b.id), rid);
-    if (r.changes === 0) return fail(404, "Premio no encontrado.");
-  } else {
-    d.prepare("INSERT INTO prizes (restaurant_id, name, weight, stock, active) VALUES (?, ?, ?, ?, ?)").run(
-      rid, name, weight, stock, active,
+    const changed = await exec(
+      "UPDATE prizes SET name = $1, weight = $2, stock = $3, active = $4 WHERE id = $5 AND restaurant_id = $6",
+      [name, weight, stock, active, Number(b.id) || 0, rid],
     );
+    if (changed === 0) return fail(404, "Premio no encontrado.");
+  } else {
+    await exec("INSERT INTO prizes (restaurant_id, name, weight, stock, active) VALUES ($1, $2, $3, $4, $5)", [
+      rid, name, weight, stock, active,
+    ]);
   }
   return ok();
 }

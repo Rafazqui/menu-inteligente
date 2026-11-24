@@ -1,5 +1,5 @@
 import { requireStaff } from "@/lib/admin";
-import { db } from "@/lib/db";
+import { exec } from "@/lib/db";
 import { emit } from "@/lib/events";
 import { fail, ok, readJson } from "@/lib/http";
 
@@ -9,18 +9,17 @@ const ALLOWED = new Set(["attending", "done", "cancelled"]);
 export async function POST(req: Request, ctx: RouteContext<"/api/admin/requests/[id]">) {
   const user = await requireStaff(req);
   if (user instanceof Response) return user;
-  const { id } = await ctx.params;
+  const id = Number((await ctx.params).id);
   const body = await readJson<{ status?: string }>(req);
   const status = body?.status ?? "";
-  if (!ALLOWED.has(status)) return fail(400, "Estado inválido.");
+  if (!ALLOWED.has(status) || !Number.isInteger(id)) return fail(400, "Estado inválido.");
 
-  const r = db()
-    .prepare(
-      `UPDATE requests SET status = ?, handled_by = ?, updated_at = datetime('now')
-       WHERE id = ? AND restaurant_id = ?`,
-    )
-    .run(status, user.id, Number(id), user.restaurant_id);
-  if (r.changes === 0) return fail(404, "No encontrada.");
+  const changed = await exec(
+    `UPDATE requests SET status = $1, handled_by = $2, updated_at = now()
+     WHERE id = $3 AND restaurant_id = $4`,
+    [status, user.id, id, user.restaurant_id],
+  );
+  if (changed === 0) return fail(404, "No encontrada.");
   emit(user.restaurant_id, "requests");
   return ok();
 }

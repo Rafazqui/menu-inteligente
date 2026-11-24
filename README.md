@@ -1,69 +1,98 @@
-# Mesa App: HR Coffee & Deli
+# Menú Inteligente · HR Coffee & Deli
 
-Web app for each table in the café: customers scan the table's QR (or tap the NFC sticker) and from their phone they can:
+App web para cada mesa del café: el cliente escanea el QR de su mesa (o acerca su celular al sticker NFC) y desde su teléfono puede:
 
-1. **Play for the table's prize** (wheel, scratch card, or tic-tac-toe vs. the machine), one try per visit.
-2. **See the menu** (the PDF, shown page by page).
-3. **Browse the game library** (covers, flip to the back cover, request it from the waiter).
-4. **Call the waiter**, with an optional message ("Agua natural", "La cuenta"...).
-5. **Play minigames** while they wait (Hot Cake Tower and Minesweeper).
-6. A separate invitation to **leave a Google review** (no prize in exchange, per Google's policies).
+1. **Jugar por el premio de la mesa** (ruleta, rasca y gana o gato contra la máquina), un intento por visita.
+2. **Ver el menú** (el PDF, mostrado página por página).
+3. **Ver la ludoteca** (portadas, se voltean a la contraportada y se piden al mesero).
+4. **Llamar al mesero**, con mensaje opcional ("Agua natural", "La cuenta"…).
+5. **Jugar minijuegos** mientras espera (Torre de Hot Cakes y Buscaminas).
+6. Una invitación aparte a **dejar reseña en Google** (sin premio a cambio, por las políticas de Google).
 
-Staff use the **live panel** (`/admin`): alerts with sound, the table map, table approval and closing. The owner also has **Configuration** (probabilities, prizes, game library, menu, tables, staff) and the **QR tents** ready to print.
+El personal usa el **panel en vivo** (`/admin`): alertas con sonido, mapa de mesas, aprobación y cierre de mesas. El dueño además tiene **Configuración** (probabilidades, premios, ludoteca, menú, mesas, personal) y las **tablillas QR** listas para imprimir.
 
-## Running it
+## Cómo correrlo
+
+La app usa **PostgreSQL**, así puede correr en uno o varios servidores a la vez.
+
+1. Crea una base PostgreSQL (por ejemplo gratis en [Neon](https://neon.tech) o en Railway).
+2. Copia `.env.example` como `.env.local` y pega tu cadena de conexión en `DATABASE_URL`.
+3. Arranca:
 
 ```bash
 npm install
 npm run dev          # http://localhost:3000
 ```
 
-Initial users (change them under Configuration → Staff):
+Si la base está vacía, la app crea sola las tablas y los datos de ejemplo de HR Coffee.
 
-| User | Password | Role |
+Usuarios iniciales (cámbialos en Configuración → Personal):
+
+| Usuario | Contraseña | Rol |
 |---|---|---|
-| `admin` | `hrcoffee2026` | Owner |
-| `mesero` | `mesero2026` | Staff |
+| `admin` | `hrcoffee2026` | Dueño |
+| `mesero` | `mesero2026` | Personal |
 
-To simulate a table: log in to `/admin/qr` and open the URL under any QR.
+Para simular una mesa: entra a `/admin/qr` y abre la URL que aparece debajo de cualquier QR.
 
-### Testing from your phone (same Wi-Fi)
+### Migrar los datos de la versión anterior (SQLite)
+
+Si ya tenías datos en `data/app.db`, cópialos a PostgreSQL **antes** de arrancar la app con la base nueva:
+
+```bash
+npm run db:migrar                  # copia todo y verifica
+npm run db:migrar -- --reemplazar  # si PostgreSQL ya tenía datos y quieres sobrescribirlos
+```
+
+Se conservan los IDs, los tokens de los QR impresos, las contraseñas, el historial, los archivos subidos y la clave de las cookies (las sesiones abiertas siguen válidas). Todo ocurre en una sola transacción: si algo falla, PostgreSQL queda sin cambios. La carpeta `data/` no se modifica; guárdala como respaldo.
+
+### Probar desde tu celular (misma red Wi-Fi)
 
 ```powershell
-$env:DEV_ORIGINS="192.168.1.50"   # your PC's IP (ipconfig)
+$env:DEV_ORIGINS="192.168.1.50"   # la IP de tu PC (ipconfig)
 npx next dev -H 0.0.0.0
 ```
-Then open `http://192.168.1.50:3000/admin/qr` and scan a QR with your phone.
+Luego abre `http://192.168.1.50:3000/admin/qr` y escanea un QR con el celular.
 
-## How security works
+## Cómo funciona la seguridad
 
-- **QR with a random token** (`/m/Ab3...`), not the table number: you can't guess other tables' URLs.
-- **The waiter approves each table** the first time it's scanned. Someone with a photo of the QR can't do anything from outside the café. When the table is closed (they left), every phone at that table is disconnected.
-- **Signed cookies** (JWT HS256, httpOnly): the customer can't pretend to be another table.
-- **Prizes decided on the server**: the wheel and scratch card only animate the result; tic-tac-toe validates every move on the server. One prize per visit, enforced in the database (even if 2 phones press at the same time).
-- **Limits**: cooldown between waiter calls, rate limits on requests, and login brute-force protection.
-- **CSRF**: SameSite cookies + Origin header check.
-- **Uploads**: the real file type is checked (not just the extension), with a size limit and random names.
+- **QR con token aleatorio** (`/m/Ab3...`), no con el número de mesa: no se pueden adivinar las URLs de otras mesas.
+- **El mesero aprueba cada mesa** la primera vez que se escanea. Alguien con una foto del QR no puede hacer nada desde fuera del café. Al cerrar la mesa (ya se fueron), todos los celulares de esa mesa se desconectan.
+- **Cookies firmadas** (JWT HS256, httpOnly): el cliente no puede hacerse pasar por otra mesa.
+- **El servidor decide los premios**: la ruleta y el rasca y gana solo animan el resultado; el gato valida cada jugada en el servidor. Un premio por visita, garantizado en la base de datos con bloqueo de fila, aunque dos celulares jueguen a la vez en servidores distintos.
+- **Una sesión por mesa**: un índice único evita sesiones duplicadas si dos celulares escanean al mismo tiempo.
+- **Límites**: espera entre llamadas al mesero, límite de solicitudes y protección contra fuerza bruta en el login.
+- **CSRF**: cookies SameSite + verificación del encabezado Origin.
+- **Archivos**: se revisa el tipo real del archivo (no solo la extensión), con límite de tamaño y nombres aleatorios.
 
-## Structure
+## Estructura
 
 ```
-src/app/m/[token]       QR/NFC entry point (creates or joins the table session)
-src/app/mesa/*          Customer screens (phone)
-src/app/admin/*         Staff panel
+src/app/m/[token]       Entrada del QR/NFC (crea o se une a la sesión de la mesa)
+src/app/mesa/*          Pantallas del cliente (celular)
+src/app/admin/*         Panel del personal
 src/app/api/*           API (mesa/*, admin/*, uploads)
-src/lib/                Database, auth, prizes, tic-tac-toe AI, events
-data/                   SQLite + uploaded files (created on its own, not committed to git)
+src/lib/                Base de datos (PostgreSQL), auth, premios, IA del gato, eventos
+src/lib/schema.ts       Esquema de tablas (se crea solo al arrancar)
+scripts/                Migración desde SQLite y utilidades
 ```
 
-## Production
+## Producción
 
-Needs a server that keeps the process running (the live alerts use Server-Sent Events) and **a persistent disk** for `data/`: Railway, Render, Fly.io or a VPS. Environment variables:
+Todo el estado vive en PostgreSQL, así que puedes correr **uno o varios servidores** de la app a la vez (Railway, Render, Fly.io, un VPS…) sin disco persistente:
 
-- `PUBLIC_BASE_URL`: public domain, e.g. `https://mesa.hrcoffee.mx` (this is what the printed QRs point to).
-- `AUTH_SECRET`: a long random key (if missing, one is generated in `data/.auth-secret`).
-- `DATA_DIR`: (optional) where to store the database and files.
+- **Datos, archivos subidos (menú, portadas) y la clave de cookies** → en PostgreSQL.
+- **Alertas en vivo** → `LISTEN/NOTIFY` de PostgreSQL: una llamada que recibe un servidor suena en el panel conectado a cualquier otro.
 
-## Ready for more businesses
+Variables de entorno (ver `.env.example`):
 
-Every table in the database has `restaurant_id`. To sell it to other cafés: move SQLite → PostgreSQL, swap the in-memory event bus for Redis/Postgres pub-sub, and add branding per business (logo/colors are already stored in `restaurants`).
+- `DATABASE_URL`: conexión a PostgreSQL.
+- `DATABASE_URL_DIRECT`: (Neon/Supabase) conexión directa **sin pooler**, para las alertas en vivo. En Railway o un VPS no hace falta.
+- `PUBLIC_BASE_URL`: dominio público, ej. `https://mesa.hrcoffee.mx` (a esto apuntan los QR impresos).
+- `AUTH_SECRET`: opcional; si falta, se usa la guardada en la base.
+
+**Límite conocido:** los límites de frecuencia (llamadas, intentos de login) se cuentan por servidor. Con 1–3 servidores es suficiente; para muchos, conviene moverlos a Redis.
+
+## Listo para más negocios
+
+Todas las tablas tienen `restaurant_id`. Para venderlo a otros cafés falta: panel de súper administrador para dar de alta negocios, una dirección por negocio y marca configurable (logo y colores ya se guardan en `restaurants`).

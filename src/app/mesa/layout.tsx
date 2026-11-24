@@ -13,7 +13,7 @@ export default async function MesaLayout({ children }: LayoutProps<"/mesa">) {
     redirect(hadCookie ? "/?aviso=fin" : "/");
   }
   return (
-    <MesaProvider initial={buildMesaState(ctx)}>
+    <MesaProvider initial={await buildMesaState(ctx)}>
       <div className="glow-top min-h-dvh">
         <div className="mx-auto max-w-md px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">{children}</div>
       </div>

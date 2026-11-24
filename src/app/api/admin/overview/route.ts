@@ -6,5 +6,5 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const user = await requireStaff(null);
   if (user instanceof Response) return user;
-  return ok(overview(user.restaurant_id));
+  return ok(await overview(user.restaurant_id));
 }

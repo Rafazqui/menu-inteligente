@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { requireStaff } from "@/lib/admin";
-import { db } from "@/lib/db";
+import { exec, q1 } from "@/lib/db";
 import { fail, ok, readJson } from "@/lib/http";
 
 const USER_RE = /^[a-z0-9._-]{3,30}$/;
@@ -18,7 +18,6 @@ export async function POST(req: Request) {
     role?: string;
   }>(req);
   if (!b) return fail(400, "Solicitud inválida.");
-  const d = db();
   const rid = user.restaurant_id;
   const password = (b.password ?? "").toString();
 
@@ -29,27 +28,29 @@ export async function POST(req: Request) {
     if (!name) return fail(400, "Escribe el nombre.");
     if (password.length < 8) return fail(400, "La contraseña debe tener al menos 8 caracteres.");
     const role = b.role === "owner" ? "owner" : "staff";
-    if (d.prepare("SELECT id FROM staff WHERE username = ?").get(username)) {
-      return fail(409, "Ese usuario ya existe.");
-    }
-    d.prepare(
-      "INSERT INTO staff (restaurant_id, username, name, password_hash, role) VALUES (?, ?, ?, ?, ?)",
-    ).run(rid, username, name, await bcrypt.hash(password, 10), role);
+    const created = await q1(
+      `INSERT INTO staff (restaurant_id, username, name, password_hash, role) VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (username) DO NOTHING RETURNING id`,
+      [rid, username, name, await bcrypt.hash(password, 10), role],
+    );
+    if (!created) return fail(409, "Ese usuario ya existe.");
     return ok();
   }
 
   const id = Number(b.id);
-  const target = d.prepare("SELECT id FROM staff WHERE id = ? AND restaurant_id = ?").get(id, rid);
+  const target = Number.isInteger(id)
+    ? await q1("SELECT id FROM staff WHERE id = $1 AND restaurant_id = $2", [id, rid])
+    : undefined;
   if (!target) return fail(404, "Usuario no encontrado.");
 
   if (b.action === "password") {
     if (password.length < 8) return fail(400, "La contraseña debe tener al menos 8 caracteres.");
-    d.prepare("UPDATE staff SET password_hash = ? WHERE id = ?").run(await bcrypt.hash(password, 10), id);
+    await exec("UPDATE staff SET password_hash = $1 WHERE id = $2", [await bcrypt.hash(password, 10), id]);
     return ok();
   }
   if (b.action === "toggle") {
     if (id === user.id) return fail(400, "No puedes desactivar tu propio usuario.");
-    d.prepare("UPDATE staff SET active = 1 - active WHERE id = ?").run(id);
+    await exec("UPDATE staff SET active = 1 - active WHERE id = $1", [id]);
     return ok();
   }
   return fail(400, "Acción inválida.");

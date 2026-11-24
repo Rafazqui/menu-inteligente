@@ -1,30 +1,103 @@
 import "server-only";
-import Database from "better-sqlite3";
-import fs from "node:fs";
-import path from "node:path";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
+import pg, { type PoolClient, type QueryResultRow } from "pg";
+import { SCHEMA_LOCK_ID, SCHEMA_SQL } from "./schema";
 import { DEFAULT_SETTINGS } from "./types";
 
-export const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
-export const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
+// Las fechas (timestamptz) se entregan como texto ISO: se serializan igual en servidor y cliente.
+pg.types.setTypeParser(1184, (v) => new Date(v).toISOString());
+
+/** Conexión o transacción sobre la que se ejecuta una consulta. */
+export type Db = pg.Pool | PoolClient;
 
 declare global {
-  var __mesaDb: Database.Database | undefined;
+  var __mesaPool: pg.Pool | undefined;
+  var __mesaReady: Promise<void> | undefined;
 }
 
-export function db(): Database.Database {
-  if (!globalThis.__mesaDb) {
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-    const d = new Database(path.join(DATA_DIR, "app.db"));
-    d.pragma("journal_mode = WAL");
-    d.pragma("foreign_keys = ON");
-    d.pragma("busy_timeout = 5000");
-    migrate(d);
-    seed(d);
-    globalThis.__mesaDb = d;
+export function pool(): pg.Pool {
+  if (!globalThis.__mesaPool) {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error(
+        "Falta DATABASE_URL. Crea el archivo .env.local con la cadena de conexión de PostgreSQL (ver README).",
+      );
+    }
+    globalThis.__mesaPool = new pg.Pool({
+      connectionString,
+      max: Number(process.env.PG_POOL_MAX) || 10,
+      idleTimeoutMillis: 30_000,
+    });
+    // Un error en una conexión inactiva no debe tumbar el servidor.
+    globalThis.__mesaPool.on("error", (e) => console.error("[db] conexión inactiva con error:", e.message));
   }
-  return globalThis.__mesaDb;
+  return globalThis.__mesaPool;
+}
+
+/** Crea el esquema (y los datos iniciales si la base está vacía) una sola vez por proceso. */
+export function ready(): Promise<void> {
+  if (!globalThis.__mesaReady) {
+    globalThis.__mesaReady = init().catch((e) => {
+      globalThis.__mesaReady = undefined; // reintentar en la siguiente petición
+      throw e;
+    });
+  }
+  return globalThis.__mesaReady;
+}
+
+async function init() {
+  const c = await pool().connect();
+  try {
+    await c.query("SELECT pg_advisory_lock($1)", [SCHEMA_LOCK_ID]);
+    await c.query(SCHEMA_SQL);
+    await seedIfEmpty(c);
+  } finally {
+    await c.query("SELECT pg_advisory_unlock($1)", [SCHEMA_LOCK_ID]).catch(() => {});
+    c.release();
+  }
+}
+
+/** Ejecuta una consulta y devuelve las filas. */
+export async function q<T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params: unknown[] = [],
+  c?: Db,
+): Promise<T[]> {
+  await ready();
+  return (await (c ?? pool()).query<T>(text, params)).rows;
+}
+
+/** Primera fila o undefined. */
+export async function q1<T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params: unknown[] = [],
+  c?: Db,
+): Promise<T | undefined> {
+  return (await q<T>(text, params, c))[0];
+}
+
+/** Número de filas afectadas (UPDATE / DELETE). */
+export async function exec(text: string, params: unknown[] = [], c?: Db): Promise<number> {
+  await ready();
+  return (await (c ?? pool()).query(text, params)).rowCount ?? 0;
+}
+
+/** Transacción: todo o nada. */
+export async function tx<T>(fn: (c: PoolClient) => Promise<T>): Promise<T> {
+  await ready();
+  const c = await pool().connect();
+  try {
+    await c.query("BEGIN");
+    const result = await fn(c);
+    await c.query("COMMIT");
+    return result;
+  } catch (e) {
+    await c.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    c.release();
+  }
 }
 
 /** Token aleatorio para las URLs de los QR (no adivinable, a diferencia del número de mesa). */
@@ -35,122 +108,18 @@ export function randomToken(len = 12): string {
   return out;
 }
 
-function migrate(d: Database.Database) {
-  d.exec(`
-    CREATE TABLE IF NOT EXISTS restaurants (
-      id INTEGER PRIMARY KEY,
-      slug TEXT UNIQUE NOT NULL,
-      name TEXT NOT NULL,
-      tagline TEXT NOT NULL DEFAULT '',
-      logo_url TEXT NOT NULL DEFAULT '',
-      google_review_url TEXT NOT NULL DEFAULT '',
-      menu_file TEXT,
-      settings TEXT NOT NULL DEFAULT '{}',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+async function seedIfEmpty(c: PoolClient) {
+  const exists = await c.query("SELECT 1 FROM restaurants LIMIT 1");
+  if (exists.rowCount) return;
+  // Al migrar desde SQLite no se deben crear datos de ejemplo.
+  if (process.env.NO_SEED === "1") return;
 
-    CREATE TABLE IF NOT EXISTS tables (
-      id INTEGER PRIMARY KEY,
-      restaurant_id INTEGER NOT NULL REFERENCES restaurants(id),
-      number INTEGER NOT NULL,
-      area TEXT NOT NULL DEFAULT '',
-      token TEXT UNIQUE NOT NULL,
-      active INTEGER NOT NULL DEFAULT 1,
-      UNIQUE (restaurant_id, number)
-    );
-
-    CREATE TABLE IF NOT EXISTS table_sessions (
-      id INTEGER PRIMARY KEY,
-      restaurant_id INTEGER NOT NULL REFERENCES restaurants(id),
-      table_id INTEGER NOT NULL REFERENCES tables(id),
-      status TEXT NOT NULL CHECK (status IN ('pending','open','closed')),
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      opened_at TEXT,
-      closed_at TEXT,
-      reward_used INTEGER NOT NULL DEFAULT 0
-    );
-    CREATE INDEX IF NOT EXISTS idx_sessions_table ON table_sessions(table_id, status);
-
-    CREATE TABLE IF NOT EXISTS staff (
-      id INTEGER PRIMARY KEY,
-      restaurant_id INTEGER NOT NULL REFERENCES restaurants(id),
-      username TEXT UNIQUE NOT NULL,
-      name TEXT NOT NULL,
-      password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('owner','staff')),
-      active INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS board_games (
-      id INTEGER PRIMARY KEY,
-      restaurant_id INTEGER NOT NULL REFERENCES restaurants(id),
-      name TEXT NOT NULL,
-      genre TEXT NOT NULL DEFAULT '',
-      min_players INTEGER NOT NULL DEFAULT 2,
-      max_players INTEGER NOT NULL DEFAULT 4,
-      minutes INTEGER NOT NULL DEFAULT 30,
-      summary TEXT NOT NULL DEFAULT '',
-      cover_file TEXT,
-      back_file TEXT,
-      available INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS prizes (
-      id INTEGER PRIMARY KEY,
-      restaurant_id INTEGER NOT NULL REFERENCES restaurants(id),
-      name TEXT NOT NULL,
-      weight INTEGER NOT NULL DEFAULT 1,
-      stock INTEGER,
-      active INTEGER NOT NULL DEFAULT 1
-    );
-
-    CREATE TABLE IF NOT EXISTS reward_plays (
-      id INTEGER PRIMARY KEY,
-      restaurant_id INTEGER NOT NULL REFERENCES restaurants(id),
-      session_id INTEGER NOT NULL REFERENCES table_sessions(id),
-      table_id INTEGER NOT NULL REFERENCES tables(id),
-      game TEXT NOT NULL CHECK (game IN ('ruleta','rasca','gato')),
-      status TEXT NOT NULL CHECK (status IN ('playing','won','lost')),
-      state TEXT,
-      prize_id INTEGER,
-      prize_name TEXT,
-      code TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      finished_at TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_plays_session ON reward_plays(session_id);
-
-    CREATE TABLE IF NOT EXISTS requests (
-      id INTEGER PRIMARY KEY,
-      restaurant_id INTEGER NOT NULL REFERENCES restaurants(id),
-      table_id INTEGER NOT NULL REFERENCES tables(id),
-      session_id INTEGER NOT NULL REFERENCES table_sessions(id),
-      type TEXT NOT NULL CHECK (type IN ('waiter','boardgame','prize')),
-      message TEXT,
-      board_game_id INTEGER,
-      reward_play_id INTEGER,
-      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','attending','done','cancelled')),
-      handled_by INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_requests_rest ON requests(restaurant_id, status);
-  `);
-}
-
-function seed(d: Database.Database) {
-  const exists = d.prepare("SELECT id FROM restaurants LIMIT 1").get();
-  if (exists) return;
-
-  const tx = d.transaction(() => {
-    const r = d
-      .prepare(
-        `INSERT INTO restaurants (slug, name, tagline, logo_url, google_review_url, settings)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
+  await c.query("BEGIN");
+  try {
+    const r = await c.query<{ id: number }>(
+      `INSERT INTO restaurants (slug, name, tagline, logo_url, google_review_url, settings)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [
         "hr-coffee",
         "HR Coffee & Deli",
         "Tu pausa sabe mejor en HR",
@@ -158,46 +127,30 @@ function seed(d: Database.Database) {
         // Reemplazar desde el panel por el enlace directo de reseña del perfil de Google.
         "https://www.google.com/maps/search/?api=1&query=HR+Coffee+%26+Deli+Tijuana",
         JSON.stringify(DEFAULT_SETTINGS),
-      );
-    const rid = Number(r.lastInsertRowid);
-
-    const insTable = d.prepare(
-      "INSERT INTO tables (restaurant_id, number, area, token) VALUES (?, ?, ?, ?)",
+      ],
     );
+    const rid = r.rows[0].id;
+
     for (let n = 1; n <= 20; n++) {
-      insTable.run(rid, n, n <= 10 ? "Planta baja" : "Rooftop", randomToken());
+      await c.query("INSERT INTO tables (restaurant_id, number, area, token) VALUES ($1, $2, $3, $4)", [
+        rid, n, n <= 10 ? "Planta baja" : "Rooftop", randomToken(),
+      ]);
     }
 
-    const insStaff = d.prepare(
-      "INSERT INTO staff (restaurant_id, username, name, password_hash, role) VALUES (?, ?, ?, ?, ?)",
-    );
-    insStaff.run(
-      rid,
-      "admin",
-      "Administrador",
-      bcrypt.hashSync(process.env.SEED_OWNER_PASSWORD || "hrcoffee2026", 10),
-      "owner",
-    );
-    insStaff.run(
-      rid,
-      "mesero",
-      "Mesero en turno",
-      bcrypt.hashSync(process.env.SEED_STAFF_PASSWORD || "mesero2026", 10),
-      "staff",
-    );
+    const insStaff = "INSERT INTO staff (restaurant_id, username, name, password_hash, role) VALUES ($1, $2, $3, $4, $5)";
+    await c.query(insStaff, [rid, "admin", "Administrador", bcrypt.hashSync(process.env.SEED_OWNER_PASSWORD || "hrcoffee2026", 10), "owner"]);
+    await c.query(insStaff, [rid, "mesero", "Mesero en turno", bcrypt.hashSync(process.env.SEED_STAFF_PASSWORD || "mesero2026", 10), "staff"]);
 
-    const insPrize = d.prepare(
-      "INSERT INTO prizes (restaurant_id, name, weight, stock) VALUES (?, ?, ?, ?)",
-    );
-    insPrize.run(rid, "Galleta de la casa", 5, null);
-    insPrize.run(rid, "Topping extra gratis", 4, null);
-    insPrize.run(rid, "10% de descuento", 3, null);
-    insPrize.run(rid, "Café americano gratis", 1, 10);
+    const prizes: [string, number, number | null][] = [
+      ["Galleta de la casa", 5, null],
+      ["Topping extra gratis", 4, null],
+      ["10% de descuento", 3, null],
+      ["Café americano gratis", 1, 10],
+    ];
+    for (const p of prizes) {
+      await c.query("INSERT INTO prizes (restaurant_id, name, weight, stock) VALUES ($1, $2, $3, $4)", [rid, ...p]);
+    }
 
-    const insGame = d.prepare(
-      `INSERT INTO board_games (restaurant_id, name, genre, min_players, max_players, minutes, summary)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    );
     const games: [string, string, number, number, number, string][] = [
       ["Jenga", "Destreza", 1, 8, 15, "Saquen bloques de la torre sin tirarla y pónganlos arriba. Quien la derrumbe pierde. Nervios garantizados."],
       ["UNO", "Cartas", 2, 10, 20, "Descarta tus cartas por color o número y usa las especiales para fastidiar a los demás. ¡No olvides gritar UNO!"],
@@ -208,7 +161,16 @@ function seed(d: Database.Database) {
       ["Dobble", "Rapidez", 2, 8, 10, "Siempre hay exactamente un símbolo en común entre dos cartas. Encuéntralo antes que nadie."],
       ["Ajedrez", "Estrategia clásica", 2, 2, 30, "El juego de estrategia por excelencia. Acorrala al rey rival con jaque mate."],
     ];
-    for (const g of games) insGame.run(rid, ...g);
-  });
-  tx();
+    for (const g of games) {
+      await c.query(
+        `INSERT INTO board_games (restaurant_id, name, genre, min_players, max_players, minutes, summary)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [rid, ...g],
+      );
+    }
+    await c.query("COMMIT");
+  } catch (e) {
+    await c.query("ROLLBACK").catch(() => {});
+    throw e;
+  }
 }

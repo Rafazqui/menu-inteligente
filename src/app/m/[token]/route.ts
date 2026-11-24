@@ -11,7 +11,7 @@ import { createSession, getLiveSession, getSettings, getTableByToken } from "@/l
  */
 export async function GET(req: NextRequest, ctx: RouteContext<"/m/[token]">) {
   const { token } = await ctx.params;
-  const table = getTableByToken(token);
+  const table = await getTableByToken(token);
   if (!table) return NextResponse.redirect(publicUrl(req, "/?aviso=mesa"));
 
   const current = await getTableContext();
@@ -20,16 +20,16 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/m/[token]">) {
   if (current && current.table.id === table.id) {
     sessionId = current.session.id;
   } else {
-    const live = getLiveSession(table.id);
+    const live = await getLiveSession(table.id);
     if (live) {
       sessionId = live.session.id;
     } else {
-      const { requireApproval } = getSettings(table.restaurant_id);
+      const { requireApproval } = await getSettings(table.restaurant_id);
       // Evita que alguien con una foto del QR inunde el panel de solicitudes.
       if (requireApproval && !rateLimit(`pending:${table.id}`, 3, 2 * 60_000)) {
         return NextResponse.redirect(publicUrl(req, "/?aviso=espera"));
       }
-      sessionId = createSession(table, requireApproval ? "pending" : "open").id;
+      sessionId = (await createSession(table, requireApproval ? "pending" : "open")).id;
     }
   }
 

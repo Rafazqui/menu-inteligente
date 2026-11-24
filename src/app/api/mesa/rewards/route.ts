@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const ctx = await getTableContext();
   if (!ctx) return fail(401, "sin_sesion");
-  const prizes = availablePrizes(ctx.restaurant.id).map((p) => ({ id: p.id, name: p.name }));
+  const prizes = (await availablePrizes(ctx.restaurant.id)).map((p) => ({ id: p.id, name: p.name }));
   return ok({ prizes });
 }
 
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   const body = await readJson<{ game?: string }>(req);
   if (body?.game !== "ruleta" && body?.game !== "rasca") return fail(400, "Juego inválido.");
   try {
-    return ok(playInstant(ctx.session.id, body.game));
+    return ok(await playInstant(ctx.session.id, body.game));
   } catch (e) {
     if (e instanceof RewardError) return fail(e.status, e.message);
     throw e;

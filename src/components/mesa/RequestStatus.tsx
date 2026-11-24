@@ -22,9 +22,9 @@ export function StatusChip({ status }: { status: RequestStatus }) {
   );
 }
 
-/** "hace 3 min" a partir de un datetime UTC de SQLite. */
-export function timeAgo(sqliteUtc: string): string {
-  const t = new Date(sqliteUtc.replace(" ", "T") + "Z").getTime();
+/** "hace 3 min" a partir de una fecha ISO (PostgreSQL) o "YYYY-MM-DD HH:MM:SS" UTC. */
+export function timeAgo(when: string): string {
+  const t = new Date(when.includes("T") ? when : when.replace(" ", "T") + "Z").getTime();
   const s = Math.max(0, Math.round((Date.now() - t) / 1000));
   if (s < 60) return "justo ahora";
   const m = Math.round(s / 60);

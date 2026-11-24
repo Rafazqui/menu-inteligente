@@ -7,5 +7,5 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const ctx = await getTableContext();
   if (!ctx) return fail(401, "sin_sesion");
-  return ok(buildMesaState(ctx));
+  return ok(await buildMesaState(ctx));
 }

@@ -1,5 +1,5 @@
 import { requireStaff } from "@/lib/admin";
-import { bus, type BusEvent } from "@/lib/events";
+import { bus, ensureListener, type BusEvent } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const user = await requireStaff(null);
   if (user instanceof Response) return user;
+  ensureListener(); // escuchar los avisos de todos los servidores (LISTEN/NOTIFY)
 
   const enc = new TextEncoder();
   let cleanup = () => {};

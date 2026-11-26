@@ -3,6 +3,7 @@ import { getTableContext } from "@/lib/auth";
 import { uploadUrl } from "@/lib/types";
 import { MesaHeader } from "@/components/mesa/MesaHeader";
 import { PdfViewer } from "@/components/mesa/PdfViewer";
+import { TrackView } from "@/components/mesa/Track";
 
 export default async function MenuPage() {
   const ctx = await getTableContext();
@@ -11,6 +12,7 @@ export default async function MenuPage() {
   return (
     <>
       <MesaHeader title="Menú" />
+      <TrackView type="menu_view" />
       <div className="pt-2">
         {url ? (
           <PdfViewer url={url} />

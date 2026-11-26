@@ -150,4 +150,13 @@ body {
   .no-print { display: none !important; }
   .print-bg-white { background: #fff !important; }
   article { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* Reporte de estadísticas: texto oscuro sobre papel blanco, barras con su color */
+  .print-report, .print-report * { color: #111 !important; border-color: #d4d4d8 !important; }
+  .print-report .card { background: #fff !important; box-shadow: none !important; }
+  .print-report .bar { background: #e0a800 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .print-report .bg-line { background: #e4e4e7 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .print-report .text-ok, .print-report .text-ok * { color: #15803d !important; }
+  .print-report .text-danger, .print-report .text-danger * { color: #b91c1c !important; }
+  .break-inside-avoid { break-inside: avoid; }
 }

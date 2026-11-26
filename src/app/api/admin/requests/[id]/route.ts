@@ -15,7 +15,9 @@ export async function POST(req: Request, ctx: RouteContext<"/api/admin/requests/
   if (!ALLOWED.has(status) || !Number.isInteger(id)) return fail(400, "Estado inválido.");
 
   const changed = await exec(
-    `UPDATE requests SET status = $1, handled_by = $2, updated_at = now()
+    `UPDATE requests SET status = $1::text, handled_by = $2, updated_at = now(),
+       -- se guarda solo la PRIMERA respuesta, para medir qué tan rápido se atiende
+       responded_at = CASE WHEN $1::text IN ('attending','done') THEN COALESCE(responded_at, now()) ELSE responded_at END
      WHERE id = $3 AND restaurant_id = $4`,
     [status, user.id, id, user.restaurant_id],
   );

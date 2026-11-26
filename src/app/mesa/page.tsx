@@ -4,6 +4,7 @@ import Link from "next/link";
 import { BellRing, BookOpen, ChevronRight, Dices, Gamepad2, Gift, Star, Ticket } from "lucide-react";
 import { MesaHeader, PendingBanner } from "@/components/mesa/MesaHeader";
 import { useMesa } from "@/components/mesa/MesaProvider";
+import { track } from "@/components/mesa/Track";
 
 export default function MesaHome() {
   const { state } = useMesa();
@@ -79,6 +80,7 @@ export default function MesaHome() {
             href={state.restaurant.reviewUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => track("review_click")}
             className="card flex items-center gap-4 p-4 active:scale-[0.98] transition-transform"
           >
             <div className="flex-1">

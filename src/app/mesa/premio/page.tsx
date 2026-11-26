@@ -70,6 +70,10 @@ export default function PremioPage() {
                 <ChevronRight className="text-muted" />
               </button>
             ))}
+            <p className="pt-1 text-center text-xs text-muted">
+              Al jugar aceptas los{" "}
+              <Link href="/terminos" className="underline underline-offset-2">Términos de la promoción</Link>.
+            </p>
           </>
         )}
 

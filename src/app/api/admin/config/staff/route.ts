@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { requireStaff } from "@/lib/admin";
 import { exec, q1 } from "@/lib/db";
 import { fail, ok, readJson } from "@/lib/http";
+import { weakPassword } from "@/lib/passwords";
 
 const USER_RE = /^[a-z0-9._-]{3,30}$/;
 
@@ -26,7 +27,8 @@ export async function POST(req: Request) {
     const name = (b.name ?? "").toString().trim().slice(0, 40);
     if (!USER_RE.test(username)) return fail(400, "Usuario: 3–30 letras minúsculas, números, punto o guion.");
     if (!name) return fail(400, "Escribe el nombre.");
-    if (password.length < 8) return fail(400, "La contraseña debe tener al menos 8 caracteres.");
+    const weak = weakPassword(password, username);
+    if (weak) return fail(400, weak);
     const role = b.role === "owner" ? "owner" : "staff";
     const created = await q1(
       `INSERT INTO staff (restaurant_id, username, name, password_hash, role) VALUES ($1, $2, $3, $4, $5)
@@ -39,12 +41,13 @@ export async function POST(req: Request) {
 
   const id = Number(b.id);
   const target = Number.isInteger(id)
-    ? await q1("SELECT id FROM staff WHERE id = $1 AND restaurant_id = $2", [id, rid])
+    ? await q1<{ id: number; username: string }>("SELECT id, username FROM staff WHERE id = $1 AND restaurant_id = $2", [id, rid])
     : undefined;
   if (!target) return fail(404, "Usuario no encontrado.");
 
   if (b.action === "password") {
-    if (password.length < 8) return fail(400, "La contraseña debe tener al menos 8 caracteres.");
+    const weak = weakPassword(password, target.username);
+    if (weak) return fail(400, weak);
     await exec("UPDATE staff SET password_hash = $1 WHERE id = $2", [await bcrypt.hash(password, 10), id]);
     return ok();
   }

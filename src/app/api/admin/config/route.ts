@@ -79,11 +79,22 @@ export async function POST(req: Request) {
       };
     }
   }
+  const legalIn = s.legal ?? prev.legal;
+  const legal = {
+    owner: String(legalIn.owner ?? "").trim().slice(0, 120),
+    address: String(legalIn.address ?? "").trim().slice(0, 200),
+    email: String(legalIn.email ?? "").trim().slice(0, 120),
+  };
+  if (legal.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(legal.email)) {
+    return fail(400, "El correo de contacto no parece válido.");
+  }
+
   const settings: RestaurantSettings = {
     games,
     requireApproval: s.requireApproval === undefined ? prev.requireApproval : Boolean(s.requireApproval),
     waiterCooldownSec: clamp(s.waiterCooldownSec, 15, 600, prev.waiterCooldownSec),
     sessionMaxHours: clamp(s.sessionMaxHours, 1, 24, prev.sessionMaxHours),
+    legal,
   };
 
   await exec(

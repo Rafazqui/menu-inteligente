@@ -10,7 +10,8 @@
     "postinstall": "node scripts/copy-pdf-worker.mjs",
     "typecheck": "next typegen && tsc --noEmit",
     "db:migrar": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env.local scripts/migrar-sqlite-a-postgres.mts",
-    "db:local": "node scripts/db-local.mjs"
+    "db:local": "node scripts/db-local.mjs",
+    "usuario:clave": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env.local scripts/cambiar-clave.mts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

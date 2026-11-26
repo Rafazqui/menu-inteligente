@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { signStaffCookie, STAFF_COOKIE, staffCookieOptions } from "@/lib/auth";
 import { q1 } from "@/lib/db";
 import { clientIp, fail, ok, rateLimit, readJson, sameOrigin } from "@/lib/http";
+import { isBannedPassword } from "@/lib/passwords";
 
 // Hash de relleno para que el tiempo de respuesta no revele si el usuario existe.
 const DUMMY_HASH = bcrypt.hashSync("no-existe", 10);
@@ -27,7 +28,8 @@ export async function POST(req: Request) {
   if (!user || !valid) return fail(401, "Usuario o contraseña incorrectos.");
 
   (await cookies()).set(STAFF_COOKIE, await signStaffCookie(user.id), staffCookieOptions);
-  return ok({ ok: true });
+  // Avisar si entró con una contraseña que ya es pública, para que la cambie de inmediato.
+  return ok({ ok: true, mustChangePassword: isBannedPassword(password) });
 }
 
 export async function DELETE(req: Request) {

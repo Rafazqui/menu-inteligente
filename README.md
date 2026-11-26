@@ -46,12 +46,17 @@ Límites en Vercel: archivos de máximo **4 MB**; las alertas en vivo se reconec
 
 Si la base está vacía, la app crea sola las tablas y los datos de ejemplo de HR Coffee.
 
-Usuarios iniciales (cámbialos en Configuración → Personal):
+Usuarios iniciales: `admin` (dueño) y `mesero` (personal). Sus contraseñas se **generan al azar** la primera vez que se crea la base y se muestran **una sola vez** en la consola del servidor (en Vercel: Deployments → Logs). Cámbialas después en Configuración → Personal.
 
-| Usuario | Contraseña | Rol |
-|---|---|---|
-| `admin` | `hrcoffee2026` | Dueño |
-| `mesero` | `mesero2026` | Personal |
+Para fijarlas tú desde el inicio, define `SEED_OWNER_PASSWORD` y `SEED_STAFF_PASSWORD` antes del primer arranque.
+
+### ¿Olvidaste una contraseña?
+
+```powershell
+npm run usuario:clave -- admin
+```
+
+Genera una contraseña nueva y segura para ese usuario y la muestra en pantalla (usa la base de `.env.local`; para la de producción, define antes `DATABASE_URL_DIRECT` como en la migración).
 
 Para simular una mesa: entra a `/admin/qr` y abre la URL que aparece debajo de cualquier QR.
 

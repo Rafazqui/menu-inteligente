@@ -16,6 +16,15 @@ export interface RestaurantSettings {
   waiterCooldownSec: number;
   /** Horas tras las cuales una mesa abierta se cierra sola. */
   sessionMaxHours: number;
+  /** Datos del responsable para los términos de la promoción y el aviso de privacidad. */
+  legal: LegalInfo;
+}
+
+export interface LegalInfo {
+  /** Nombre de la persona o razón social responsable del negocio. */
+  owner: string;
+  address: string;
+  email: string;
 }
 
 export const DEFAULT_SETTINGS: RestaurantSettings = {
@@ -27,6 +36,7 @@ export const DEFAULT_SETTINGS: RestaurantSettings = {
   requireApproval: true,
   waiterCooldownSec: 60,
   sessionMaxHours: 6,
+  legal: { owner: "", address: "", email: "" },
 };
 
 export function parseSettings(raw: string | null | undefined): RestaurantSettings {
@@ -40,6 +50,7 @@ export function parseSettings(raw: string | null | undefined): RestaurantSetting
         rasca: { ...DEFAULT_SETTINGS.games.rasca, ...s.games?.rasca },
         gato: { ...DEFAULT_SETTINGS.games.gato, ...s.games?.gato },
       },
+      legal: { ...DEFAULT_SETTINGS.legal, ...s.legal },
     };
   } catch {
     return DEFAULT_SETTINGS;

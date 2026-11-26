@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { QrCode, Nfc } from "lucide-react";
 
 const AVISOS: Record<string, string> = {
@@ -23,6 +24,11 @@ export default async function Home(props: PageProps<"/">) {
         <span className="flex items-center gap-2 text-sm"><QrCode size={20} className="text-brand" /> Código QR</span>
         <span className="flex items-center gap-2 text-sm"><Nfc size={20} className="text-brand" /> NFC</span>
       </div>
+      <p className="mt-10 text-xs text-muted">
+        <Link href="/terminos" className="underline underline-offset-2">Términos de la promoción</Link>
+        {" · "}
+        <Link href="/privacidad" className="underline underline-offset-2">Aviso de privacidad</Link>
+      </p>
     </main>
   );
 }

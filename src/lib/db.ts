@@ -118,6 +118,11 @@ export function randomToken(len = 12): string {
 }
 
 /** Datos de ejemplo si la base está vacía. Se ejecuta dentro de la transacción de init(). */
+/** Contraseña aleatoria fácil de dictar (sin caracteres que se confundan, como 0/O o 1/l). */
+export function randomPassword(len = 14): string {
+  return randomToken(len);
+}
+
 async function seedIfEmpty(c: PoolClient) {
   const exists = await c.query("SELECT 1 FROM restaurants LIMIT 1");
   if (exists.rowCount) return;
@@ -146,9 +151,20 @@ async function seedIfEmpty(c: PoolClient) {
       ]);
     }
 
+    // Sin contraseñas fijas en el código: si no se definen por variable de entorno, se generan
+    // al azar y se muestran UNA vez en la consola del servidor (en Vercel: Logs del deployment).
+    const ownerPw = process.env.SEED_OWNER_PASSWORD || randomPassword();
+    const staffPw = process.env.SEED_STAFF_PASSWORD || randomPassword();
     const insStaff = "INSERT INTO staff (restaurant_id, username, name, password_hash, role) VALUES ($1, $2, $3, $4, $5)";
-    await c.query(insStaff, [rid, "admin", "Administrador", bcrypt.hashSync(process.env.SEED_OWNER_PASSWORD || "hrcoffee2026", 10), "owner"]);
-    await c.query(insStaff, [rid, "mesero", "Mesero en turno", bcrypt.hashSync(process.env.SEED_STAFF_PASSWORD || "mesero2026", 10), "staff"]);
+    await c.query(insStaff, [rid, "admin", "Administrador", bcrypt.hashSync(ownerPw, 10), "owner"]);
+    await c.query(insStaff, [rid, "mesero", "Mesero en turno", bcrypt.hashSync(staffPw, 10), "staff"]);
+    if (!process.env.SEED_OWNER_PASSWORD || !process.env.SEED_STAFF_PASSWORD) {
+      console.warn(
+        "\n[mesa-app] Base nueva: usuarios iniciales creados. Guarda estas contraseñas y cámbialas en Configuración → Personal:\n" +
+          (process.env.SEED_OWNER_PASSWORD ? "" : `  admin  → ${ownerPw}\n`) +
+          (process.env.SEED_STAFF_PASSWORD ? "" : `  mesero → ${staffPw}\n`),
+      );
+    }
 
     const prizes: [string, number, number | null][] = [
       ["Galleta de la casa", 5, null],

@@ -23,7 +23,9 @@ export default function LoginPage() {
     }).catch(() => null);
     setLoading(false);
     if (res?.ok) {
-      router.replace("/admin");
+      const data = await res.json().catch(() => null);
+      // Si entró con una contraseña pública, lo llevamos directo a cambiarla.
+      router.replace(data?.mustChangePassword ? "/admin/cuenta?cambiar=1" : "/admin");
       router.refresh();
     } else {
       const data = await res?.json().catch(() => null);

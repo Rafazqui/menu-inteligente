@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, LayoutDashboard, LogOut, QrCode, Settings } from "lucide-react";
+import { BarChart3, LayoutDashboard, LogOut, QrCode, Settings, UserRound } from "lucide-react";
 
 export function AdminNav({ name, role, restaurant }: { name: string; role: "owner" | "staff"; restaurant: string }) {
   const path = usePathname();
@@ -53,6 +53,14 @@ export function AdminNav({ name, role, restaurant }: { name: string; role: "owne
             );
           })}
         </nav>
+        <Link
+          href="/admin/cuenta"
+          aria-label="Mi cuenta"
+          title="Mi cuenta"
+          className={`btn-ghost grid size-9 shrink-0 place-items-center ${path.startsWith("/admin/cuenta") ? "border-brand text-brand" : ""}`}
+        >
+          <UserRound size={16} />
+        </Link>
         <button onClick={logout} className="btn-ghost inline-flex items-center gap-2 px-3 py-2 text-sm" aria-label="Cerrar sesión">
           <LogOut size={16} />
           <span className="hidden sm:inline">Salir</span>

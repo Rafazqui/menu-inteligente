@@ -96,9 +96,16 @@ export default function MesaHome() {
           </a>
         )}
 
-        <p className="pt-4 text-center text-xs text-muted">
-          {state.restaurant.name} · Mesa {state.table.number}
-        </p>
+        <footer className="space-y-1 pt-4 text-center text-xs text-muted">
+          <p>
+            {state.restaurant.name} · Mesa {state.table.number}
+          </p>
+          <p>
+            <Link href="/terminos" className="underline underline-offset-2">Términos de la promoción</Link>
+            {" · "}
+            <Link href="/privacidad" className="underline underline-offset-2">Aviso de privacidad</Link>
+          </p>
+        </footer>
       </div>
     </>
   );

@@ -132,6 +132,7 @@ export function NegocioTab({ data, reload }: { data: ConfigData; reload: () => v
   const [requireApproval, setRequireApproval] = useState(b.settings.requireApproval);
   const [cooldown, setCooldown] = useState(b.settings.waiterCooldownSec);
   const [hours, setHours] = useState(b.settings.sessionMaxHours);
+  const [legal, setLegal] = useState(b.settings.legal);
 
   async function save() {
     flash(
@@ -139,7 +140,7 @@ export function NegocioTab({ data, reload }: { data: ConfigData; reload: () => v
         name,
         tagline,
         googleReviewUrl: review,
-        settings: { requireApproval, waiterCooldownSec: cooldown, sessionMaxHours: hours },
+        settings: { requireApproval, waiterCooldownSec: cooldown, sessionMaxHours: hours, legal },
       }),
     );
     reload();
@@ -158,6 +159,27 @@ export function NegocioTab({ data, reload }: { data: ConfigData; reload: () => v
         >
           <input className="input" type="url" placeholder="https://g.page/r/…" value={review} onChange={(e) => setReview(e.target.value)} />
         </Field>
+      </Section>
+
+      <Section
+        title="Datos legales"
+        desc="Aparecen en los Términos de la promoción y en el Aviso de privacidad que ven los clientes. Haz que un abogado revise esos textos antes de usarlos con clientes reales."
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Responsable (nombre o razón social)">
+            <input className="input" maxLength={120} value={legal.owner} onChange={(e) => setLegal({ ...legal, owner: e.target.value })} />
+          </Field>
+          <Field label="Correo de contacto">
+            <input className="input" type="email" maxLength={120} value={legal.email} onChange={(e) => setLegal({ ...legal, email: e.target.value })} />
+          </Field>
+        </div>
+        <Field label="Domicilio">
+          <input className="input" maxLength={200} value={legal.address} onChange={(e) => setLegal({ ...legal, address: e.target.value })} />
+        </Field>
+        <p className="flex flex-wrap gap-4 text-sm">
+          <a href="/terminos" target="_blank" className="text-brand underline">Ver Términos de la promoción</a>
+          <a href="/privacidad" target="_blank" className="text-brand underline">Ver Aviso de privacidad</a>
+        </p>
       </Section>
 
       <Section title="Seguridad de las mesas">

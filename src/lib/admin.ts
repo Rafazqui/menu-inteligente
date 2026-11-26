@@ -28,11 +28,20 @@ export interface OverviewTable {
   };
 }
 
+export interface OverviewLoan {
+  game_id: number;
+  game_name: string;
+  table_number: number;
+  area: string;
+  since: string;
+}
+
 export interface OverviewRequest {
   id: number;
-  type: "waiter" | "boardgame" | "prize";
+  type: "waiter" | "boardgame" | "prize" | "bill" | "promo";
   status: "pending" | "attending" | "done" | "cancelled";
   message: string | null;
+  payment_method: "efectivo" | "tarjeta" | null;
   table_number: number;
   area: string;
   game_name: string | null;
@@ -72,7 +81,7 @@ export async function overview(restaurantId: number) {
   }));
 
   const baseSql = `
-    SELECT r.id, r.type, r.status, r.message, t.number AS table_number, t.area,
+    SELECT r.id, r.type, r.status, r.message, r.payment_method, t.number AS table_number, t.area,
            g.name AS game_name, st.name AS handled_by_name, r.created_at, r.updated_at
     FROM requests r
     JOIN tables t ON t.id = r.table_id
@@ -80,14 +89,23 @@ export async function overview(restaurantId: number) {
     LEFT JOIN staff st ON st.id = r.handled_by
     WHERE r.restaurant_id = $1`;
 
-  const [active, recent] = await Promise.all([
+  const [active, recent, loans] = await Promise.all([
     q<OverviewRequest>(`${baseSql} AND r.status IN ('pending','attending') ORDER BY r.id ASC`, [restaurantId]),
     q<OverviewRequest>(
       `${baseSql} AND r.status IN ('done','cancelled') AND r.updated_at > now() - interval '3 hours'
        ORDER BY r.updated_at DESC LIMIT 25`,
       [restaurantId],
     ),
+    q<OverviewLoan>(
+      `SELECT g.id AS game_id, g.name AS game_name, t.number AS table_number, t.area, g.in_use_since AS since
+       FROM board_games g
+       JOIN table_sessions s ON s.id = g.in_use_session_id
+       JOIN tables t ON t.id = s.table_id
+       WHERE g.restaurant_id = $1
+       ORDER BY g.in_use_since`,
+      [restaurantId],
+    ),
   ]);
 
-  return { tables, active, recent };
+  return { tables, active, recent, loans };
 }

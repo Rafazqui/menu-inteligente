@@ -9,9 +9,12 @@ export default async function LudotecaPage() {
   const ctx = await getTableContext();
   const games = ctx
     ? await q<BoardGame>(
-        `SELECT id, name, genre, min_players, max_players, minutes, summary, cover_file, back_file, available
-         FROM board_games WHERE restaurant_id = $1 ORDER BY available DESC, lower(name)`,
-        [ctx.restaurant.id],
+        `SELECT id, name, genre, min_players, max_players, minutes, summary, cover_file, back_file, available,
+                (in_use_session_id IS NOT NULL)::int AS in_use,
+                (in_use_session_id = $2)::int AS mine
+         FROM board_games WHERE restaurant_id = $1
+         ORDER BY available DESC, (in_use_session_id IS NOT NULL AND in_use_session_id <> $2), lower(name)`,
+        [ctx.restaurant.id, ctx.session.id],
       )
     : [];
 

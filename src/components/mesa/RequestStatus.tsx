@@ -35,5 +35,7 @@ export function timeAgo(when: string): string {
 export function describeRequest(r: MesaRequest): string {
   if (r.type === "boardgame") return `Juego: ${r.game_name ?? "juego de mesa"}`;
   if (r.type === "prize") return `Premio: ${r.message ?? ""}`;
+  if (r.type === "bill") return `La cuenta${r.payment_method ? ` (${r.payment_method})` : ""}`;
+  if (r.type === "promo") return `Recomendación: ${r.message ?? ""}`;
   return r.message ? `“${r.message}”` : "Llamada al mesero";
 }

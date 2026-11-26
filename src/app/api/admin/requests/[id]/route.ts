@@ -1,5 +1,5 @@
 import { requireStaff } from "@/lib/admin";
-import { exec } from "@/lib/db";
+import { exec, q1 } from "@/lib/db";
 import { emit } from "@/lib/events";
 import { fail, ok, readJson } from "@/lib/http";
 
@@ -14,14 +14,22 @@ export async function POST(req: Request, ctx: RouteContext<"/api/admin/requests/
   const status = body?.status ?? "";
   if (!ALLOWED.has(status) || !Number.isInteger(id)) return fail(400, "Estado inválido.");
 
-  const changed = await exec(
+  const r = await q1<{ type: string; board_game_id: number | null; session_id: number }>(
     `UPDATE requests SET status = $1::text, handled_by = $2, updated_at = now(),
        -- se guarda solo la PRIMERA respuesta, para medir qué tan rápido se atiende
        responded_at = CASE WHEN $1::text IN ('attending','done') THEN COALESCE(responded_at, now()) ELSE responded_at END
-     WHERE id = $3 AND restaurant_id = $4`,
+     WHERE id = $3 AND restaurant_id = $4
+     RETURNING type, board_game_id, session_id`,
     [status, user.id, id, user.restaurant_id],
   );
-  if (changed === 0) return fail(404, "No encontrada.");
+  if (!r) return fail(404, "No encontrada.");
+  // Juego entregado → queda "en uso" por esa mesa hasta que lo devuelvan o se cierre la mesa.
+  if (status === "done" && r.type === "boardgame" && r.board_game_id) {
+    await exec(
+      "UPDATE board_games SET in_use_session_id = $1, in_use_since = now() WHERE id = $2 AND restaurant_id = $3",
+      [r.session_id, r.board_game_id, user.restaurant_id],
+    );
+  }
   emit(user.restaurant_id, "requests");
   return ok();
 }

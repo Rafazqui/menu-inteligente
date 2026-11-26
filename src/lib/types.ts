@@ -58,7 +58,10 @@ export function parseSettings(raw: string | null | undefined): RestaurantSetting
 }
 
 export type SessionStatus = "pending" | "open" | "closed";
-export type RequestType = "waiter" | "boardgame" | "prize";
+export type RequestType = "waiter" | "boardgame" | "prize" | "bill" | "promo";
+export type PaymentMethod = "efectivo" | "tarjeta";
+
+export const PAYMENT_LABEL: Record<PaymentMethod, string> = { efectivo: "efectivo", tarjeta: "tarjeta" };
 export type RequestStatus = "pending" | "attending" | "done" | "cancelled";
 
 export interface BoardGame {
@@ -72,6 +75,10 @@ export interface BoardGame {
   cover_file: string | null;
   back_file: string | null;
   available: number;
+  /** 1 si alguna mesa lo tiene prestado ahora mismo. */
+  in_use?: number;
+  /** 1 si lo tiene prestado la mesa que está viendo la ludoteca. */
+  mine?: number;
 }
 
 export interface MesaRequest {
@@ -81,7 +88,54 @@ export interface MesaRequest {
   message: string | null;
   board_game_id: number | null;
   game_name: string | null;
+  payment_method: PaymentMethod | null;
+  promo_id: number | null;
   created_at: string;
+}
+
+/** Recomendación tal como la ve el cliente (sin datos internos). */
+export interface PublicPromo {
+  id: number;
+  title: string;
+  description: string;
+  /** Precio normal en centavos (null = sin precio). */
+  priceCents: number | null;
+  /** Precio con descuento en centavos (null si no hay precio o descuento). */
+  finalCents: number | null;
+  /** Texto de la etiqueta: "-20%" o "-$15", o null sin descuento. */
+  badge: string | null;
+  imageUrl: string | null;
+  endsAt: string | null;
+}
+
+export function formatMoney(cents: number): string {
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: cents % 100 ? 2 : 0,
+    maximumFractionDigits: 2,
+  }).format(cents / 100);
+}
+
+/** Calcula precio final y etiqueta de descuento de una recomendación. */
+export function promoPricing(
+  priceCents: number | null,
+  type: "none" | "percent" | "amount",
+  value: number,
+): { finalCents: number | null; badge: string | null } {
+  if (type === "percent" && value > 0) {
+    return {
+      finalCents: priceCents === null ? null : Math.round((priceCents * (100 - value)) / 100),
+      badge: `-${value}%`,
+    };
+  }
+  if (type === "amount" && value > 0) {
+    return {
+      finalCents: priceCents === null ? null : Math.max(0, priceCents - value),
+      badge: `-${formatMoney(value)}`,
+    };
+  }
+  return { finalCents: null, badge: null };
 }
 
 export interface RewardResult {
@@ -103,6 +157,7 @@ export interface MesaState {
   };
   requests: MesaRequest[];
   waiterCooldownSec: number;
+  promos: PublicPromo[];
 }
 
 export function uploadUrl(file: string | null | undefined): string | null {

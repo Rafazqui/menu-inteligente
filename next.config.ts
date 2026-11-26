@@ -8,7 +8,7 @@ const devOrigins = (process.env.DEV_ORIGINS ?? "")
   .filter(Boolean);
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["pg"],
+  serverExternalPackages: ["pg", "web-push"],
   allowedDevOrigins: devOrigins,
   turbopack: {
     rules: {

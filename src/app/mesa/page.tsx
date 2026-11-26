@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { BellRing, BookOpen, ChevronRight, Dices, Gamepad2, Gift, Star, Ticket } from "lucide-react";
+import { BellRing, BookOpen, ChevronRight, Dices, Gamepad2, Gift, Receipt, Star, Ticket } from "lucide-react";
+import { PromoCarousel } from "@/components/mesa/PromoCarousel";
 import { MesaHeader, PendingBanner } from "@/components/mesa/MesaHeader";
 import { useMesa } from "@/components/mesa/MesaProvider";
 import { track } from "@/components/mesa/Track";
@@ -68,12 +69,28 @@ export default function MesaHome() {
           </Link>
         ) : null}
 
+        <PromoCarousel promos={state.promos} />
+
         <div className="grid grid-cols-2 gap-3">
           <Tile href="/mesa/mesero" icon={<BellRing size={26} />} title="Llamar mesero" sub="o pide algo rápido" accent />
           <Tile href="/mesa/menu" icon={<BookOpen size={26} />} title="Menú" sub="Bebidas y comida" />
           <Tile href="/mesa/ludoteca" icon={<Dices size={26} />} title="Ludoteca" sub="Juegos de mesa" />
           <Tile href="/mesa/juegos" icon={<Gamepad2 size={26} />} title="Jugar" sub="Mientras esperas" />
         </div>
+
+        <Link
+          href="/mesa/mesero#cuenta"
+          className="card flex items-center gap-4 p-4 active:scale-[0.98] transition-transform"
+        >
+          <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-brand/12 text-brand">
+            <Receipt size={24} />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold">Pedir la cuenta</p>
+            <p className="text-sm text-muted">En efectivo o con tarjeta</p>
+          </div>
+          <ChevronRight className="shrink-0 text-muted" />
+        </Link>
 
         {state.restaurant.reviewUrl && (
           <a

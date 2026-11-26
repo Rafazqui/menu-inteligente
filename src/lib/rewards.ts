@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import type { PoolClient } from "pg";
 import { q, q1, tx } from "./db";
 import { emit } from "./events";
+import { notifyStaff, tableLabel } from "./push";
 import { availablePrizes, getSettings, type PrizeRow, type SessionRow } from "./repo";
 import { aiMove, outcome, winningLine, type Cell, type GatoMode } from "./tictactoe";
 import type { RewardGame } from "./types";
@@ -102,9 +103,11 @@ const NO_PRIZE: InstantResult = { won: false, prizeId: null, prizeName: null, co
 /** Ruleta y rasca y gana: el resultado se decide aquí; el cliente solo lo anima. */
 export async function playInstant(sessionId: number, game: "ruleta" | "rasca"): Promise<InstantResult> {
   let restaurantId = 0;
+  let tableId = 0;
   const result = await tx(async (c): Promise<InstantResult> => {
     const s = await claimReward(c, sessionId, game);
     restaurantId = s.restaurant_id;
+    tableId = s.table_id;
     const chance = (await getSettings(s.restaurant_id, c)).games[game].winChance;
     if (!rollWin(chance)) {
       await insertPlay(c, s, game, "lost");
@@ -118,9 +121,20 @@ export async function playInstant(sessionId: number, game: "ruleta" | "rasca"): 
     }
     return { won: true, prizeId: award.prize.id, prizeName: award.prize.name, code: award.code };
   });
-  if (result.won) emit(restaurantId, "requests", true);
+  if (result.won) {
+    emit(restaurantId, "requests", true);
+    await notifyPrize(restaurantId, tableId, result.prizeName!, result.code!);
+  }
   emit(restaurantId, "tables");
   return result;
+}
+
+async function notifyPrize(restaurantId: number, tableId: number, prize: string, code: string) {
+  notifyStaff(restaurantId, {
+    title: `${await tableLabel(tableId)} ganó un premio`,
+    body: `${prize} · código ${code}`,
+    tag: `premio-${code}`,
+  });
 }
 
 // ---------- Gato ----------
@@ -173,10 +187,12 @@ export async function moveGato(sessionId: number, cell: number): Promise<GatoVie
   if (!Number.isInteger(cell) || cell < 0 || cell > 8) throw new RewardError(400, "Casilla inválida.");
   let alert = false;
   let restaurantId = 0;
+  let tableId = 0;
   const view = await tx(async (c): Promise<GatoView> => {
     const s = await q1<SessionRow>("SELECT * FROM table_sessions WHERE id = $1", [sessionId], c);
     if (!s || s.status !== "open") throw new RewardError(403, "Tu mesa ya no está activa.");
     restaurantId = s.restaurant_id;
+    tableId = s.table_id;
     // Bloquea la partida: dos toques simultáneos no pueden mover a la vez.
     const play = await q1<{ id: number; state: string }>(
       `SELECT id, state FROM reward_plays
@@ -205,6 +221,9 @@ export async function moveGato(sessionId: number, cell: number): Promise<GatoVie
     await q("UPDATE reward_plays SET status = 'lost', finished_at = now() WHERE id = $1", [play.id], c);
     return gatoView(st.board, "lost");
   });
-  if (alert) emit(restaurantId, "requests", true);
+  if (alert) {
+    emit(restaurantId, "requests", true);
+    await notifyPrize(restaurantId, tableId, view.prizeName!, view.code!);
+  }
   return view;
 }

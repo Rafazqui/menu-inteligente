@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, LayoutDashboard, LogOut, QrCode, Settings, UserRound } from "lucide-react";
+import { BarChart3, LayoutDashboard, LogOut, QrCode, Settings, Sparkles, UserRound } from "lucide-react";
 
 export function AdminNav({ name, role, restaurant }: { name: string; role: "owner" | "staff"; restaurant: string }) {
   const path = usePathname();
@@ -11,6 +11,7 @@ export function AdminNav({ name, role, restaurant }: { name: string; role: "owne
 
   const links = [
     { href: "/admin", label: "En vivo", icon: <LayoutDashboard size={18} /> },
+    { href: "/admin/recomendaciones", label: "Recomendaciones", icon: <Sparkles size={18} /> },
     ...(role === "owner"
       ? [
           { href: "/admin/estadisticas", label: "Estadísticas", icon: <BarChart3 size={18} /> },

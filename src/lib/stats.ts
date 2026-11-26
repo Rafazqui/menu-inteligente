@@ -34,6 +34,7 @@ export interface Stats {
   topTables: { number: number; area: string; n: number }[];
   prizes: { name: string; n: number }[];
   byGame: { game: RewardGame; played: number; won: number }[];
+  topPromos: { name: string; n: number }[];
 }
 
 // Tiempo de respuesta: para solicitudes viejas (antes de existir responded_at) se usa
@@ -44,7 +45,7 @@ const RESPONSE_SUBQUERY = `
     SELECT created_at,
            COALESCE(responded_at, CASE WHEN status IN ('attending','done') THEN updated_at END) AS resp
     FROM requests
-    WHERE restaurant_id = $1 AND type IN ('waiter','boardgame')
+    WHERE restaurant_id = $1 AND type <> 'prize'
       AND created_at >= $2::timestamptz AND created_at < $3::timestamptz
   ) r
   WHERE resp IS NOT NULL AND resp >= created_at`;
@@ -109,7 +110,7 @@ export async function getStats(rid: number, range: StatsRange): Promise<Stats> {
   ))!;
 
   const range3 = [rid, b.start, b.end];
-  const [current, previous, daily, hourly, topGames, topTables, prizes, byGame] = await Promise.all([
+  const [current, previous, daily, hourly, topGames, topTables, prizes, byGame, topPromos] = await Promise.all([
     kpis(rid, b.start, b.end),
     kpis(rid, b.prev_start, b.prev_end),
     q<{ day: string; visits: number; requests: number }>(
@@ -117,7 +118,7 @@ export async function getStats(rid: number, range: StatsRange): Promise<Stats> {
          (SELECT COUNT(*)::int FROM table_sessions s
            WHERE s.restaurant_id = $1 AND (s.opened_at AT TIME ZONE $3)::date = d) AS visits,
          (SELECT COUNT(*)::int FROM requests r
-           WHERE r.restaurant_id = $1 AND r.type IN ('waiter','boardgame')
+           WHERE r.restaurant_id = $1 AND r.type <> 'prize'
              AND (r.created_at AT TIME ZONE $3)::date = d) AS requests
        FROM generate_series(
          (($2::timestamptz) AT TIME ZONE $3)::date,
@@ -131,7 +132,7 @@ export async function getStats(rid: number, range: StatsRange): Promise<Stats> {
       `SELECT h AS hour, COUNT(r.id)::int AS requests
        FROM generate_series(0, 23) AS h
        LEFT JOIN requests r
-         ON r.restaurant_id = $1 AND r.type IN ('waiter','boardgame')
+         ON r.restaurant_id = $1 AND r.type <> 'prize'
         AND r.created_at >= $2::timestamptz AND r.created_at < $3::timestamptz
         AND EXTRACT(HOUR FROM r.created_at AT TIME ZONE $4)::int = h
        GROUP BY h ORDER BY h`,
@@ -148,7 +149,7 @@ export async function getStats(rid: number, range: StatsRange): Promise<Stats> {
     q<{ number: number; area: string; n: number }>(
       `SELECT t.number, t.area, COUNT(*)::int AS n
        FROM requests r JOIN tables t ON t.id = r.table_id
-       WHERE r.restaurant_id = $1 AND r.type IN ('waiter','boardgame')
+       WHERE r.restaurant_id = $1 AND r.type <> 'prize'
          AND r.created_at >= $2::timestamptz AND r.created_at < $3::timestamptz
        GROUP BY t.number, t.area ORDER BY n DESC, t.number LIMIT 6`,
       range3,
@@ -169,7 +170,16 @@ export async function getStats(rid: number, range: StatsRange): Promise<Stats> {
        GROUP BY game ORDER BY game`,
       range3,
     ),
+    // Recomendaciones pedidas con "Lo quiero" (el título se guarda en el mensaje al momento de pedirla).
+    q<{ name: string; n: number }>(
+      `SELECT message AS name, COUNT(*)::int AS n
+       FROM requests
+       WHERE restaurant_id = $1 AND type = 'promo' AND message IS NOT NULL
+         AND created_at >= $2::timestamptz AND created_at < $3::timestamptz
+       GROUP BY message ORDER BY n DESC, message LIMIT 6`,
+      range3,
+    ),
   ]);
 
-  return { range, timezone: tz, start: b.start, end: b.end, current, previous, daily, hourly, topGames, topTables, prizes, byGame };
+  return { range, timezone: tz, start: b.start, end: b.end, current, previous, daily, hourly, topGames, topTables, prizes, byGame, topPromos };
 }

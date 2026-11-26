@@ -1,12 +1,65 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BellRing, Check } from "lucide-react";
+import { Banknote, BellRing, Check, CreditCard, Receipt } from "lucide-react";
+import type { PaymentMethod } from "@/lib/types";
 import { MesaHeader, PendingBanner } from "@/components/mesa/MesaHeader";
 import { useMesa } from "@/components/mesa/MesaProvider";
 import { describeRequest, StatusChip, timeAgo } from "@/components/mesa/RequestStatus";
 
-const QUICK = ["Agua natural", "La cuenta, por favor", "Servilletas", "Cubiertos", "Más hielo", "Otra ronda"];
+const QUICK = ["Agua natural", "Servilletas", "Cubiertos", "Más hielo", "Otra ronda"];
+
+/** Pedir la cuenta con el método de pago, para que el mesero llegue con la terminal o con cambio. */
+function BillCard() {
+  const { state, refresh } = useMesa();
+  const [sending, setSending] = useState<PaymentMethod | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const pending = state.requests.find((r) => r.type === "bill" && (r.status === "pending" || r.status === "attending"));
+  const open = state.session.status === "open";
+
+  async function ask(method: PaymentMethod) {
+    setSending(method);
+    setError(null);
+    const res = await fetch("/api/mesa/requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "bill", method }),
+    }).catch(() => null);
+    if (!res?.ok) setError((await res?.json().catch(() => null))?.error ?? "Sin conexión. Intenta de nuevo.");
+    await refresh();
+    setSending(null);
+  }
+
+  return (
+    <section id="cuenta" className="card scroll-mt-24 space-y-3 p-4">
+      <h2 className="flex items-center gap-2 font-semibold">
+        <Receipt size={20} className="text-brand" /> Pedir la cuenta
+      </h2>
+      {pending ? (
+        <p className="flex items-center gap-2 rounded-2xl bg-ok/15 px-4 py-3 text-sm font-medium text-ok">
+          <Check size={18} /> Ya la pediste ({pending.payment_method}).{" "}
+          {pending.status === "attending" ? "Tu mesero va en camino." : "En un momento te la traen."}
+        </p>
+      ) : (
+        <>
+          <p className="text-sm text-muted">¿Cómo vas a pagar? Así tu mesero llega con lo necesario.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={() => ask("efectivo")} disabled={!open || sending !== null} className="btn-ghost flex flex-col items-center gap-1.5 py-4">
+              <Banknote size={26} className="text-brand" />
+              {sending === "efectivo" ? "Enviando…" : "Efectivo"}
+            </button>
+            <button onClick={() => ask("tarjeta")} disabled={!open || sending !== null} className="btn-ghost flex flex-col items-center gap-1.5 py-4">
+              <CreditCard size={26} className="text-brand" />
+              {sending === "tarjeta" ? "Enviando…" : "Tarjeta"}
+            </button>
+          </div>
+        </>
+      )}
+      {error && <p className="text-sm text-danger">{error}</p>}
+      {!open && <p className="text-xs text-muted">Disponible cuando tu mesa esté activa.</p>}
+    </section>
+  );
+}
 
 export default function MeseroPage() {
   const { state, refresh } = useMesa();
@@ -51,7 +104,7 @@ export default function MeseroPage() {
     }
   }
 
-  const history = state.requests.filter((r) => r.type !== "prize");
+  const history = state.requests.filter((r) => r.type !== "prize" && r.type !== "bill");
 
   return (
     <>
@@ -115,6 +168,8 @@ export default function MeseroPage() {
             )}
           </p>
         </div>
+
+        <BillCard />
 
         {history.length > 0 && (
           <section>

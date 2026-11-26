@@ -69,20 +69,28 @@ export function BoardGameGrid({ games }: { games: BoardGame[] }) {
             <li key={g.id} className="pop-in" style={{ animationDelay: `${Math.min(i, 12) * 30}ms` }}>
               <button
                 onClick={() => setOpen(g)}
-                className={`group relative block w-full aspect-[2/3] overflow-hidden rounded-2xl border border-line shadow-lg transition-transform active:scale-95 ${
-                  g.available ? "" : "opacity-45 grayscale"
-                }`}
+                className={`group relative block w-full aspect-[2/3] overflow-hidden rounded-2xl border shadow-lg transition-transform active:scale-95 ${
+                  g.mine ? "border-ok" : "border-line"
+                } ${!g.available || (g.in_use && !g.mine) ? "opacity-45 grayscale" : ""}`}
                 aria-label={`Ver ${g.name}`}
               >
                 <Cover game={g} />
-                <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-md bg-ink/80 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand backdrop-blur">
-                  {g.available ? (
+                <span
+                  className={`absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide backdrop-blur ${
+                    g.mine ? "bg-ok text-ink" : "bg-ink/80 text-brand"
+                  }`}
+                >
+                  {g.mine ? (
+                    "En tu mesa"
+                  ) : !g.available ? (
+                    "No disponible"
+                  ) : g.in_use ? (
+                    "En uso"
+                  ) : (
                     <>
                       <Users size={11} />
                       {g.min_players === g.max_players ? g.min_players : `${g.min_players}–${g.max_players}`}
                     </>
-                  ) : (
-                    "En uso"
                   )}
                 </span>
               </button>
@@ -136,7 +144,8 @@ function GameDetail({ game, onClose }: { game: BoardGame; onClose: () => void })
     }
   }
 
-  const canAsk = state.session.status === "open" && game.available && !alreadyAsked && status === "idle";
+  const canAsk =
+    state.session.status === "open" && game.available && !game.in_use && !alreadyAsked && status === "idle";
 
   return (
     <div
@@ -188,7 +197,11 @@ function GameDetail({ game, onClose }: { game: BoardGame; onClose: () => void })
                 {game.summary || "Pregúntale a tu mesero cómo se juega."}
               </p>
 
-              {status === "sent" || alreadyAsked ? (
+              {game.mine ? (
+                <div className="flex items-center justify-center gap-2 rounded-2xl bg-ok/15 py-3.5 font-semibold text-ok">
+                  <Check size={20} /> Lo tienes en tu mesa. ¡A jugar!
+                </div>
+              ) : status === "sent" || alreadyAsked ? (
                 <div className="flex items-center justify-center gap-2 rounded-2xl bg-ok/15 py-3.5 font-semibold text-ok">
                   <Check size={20} /> ¡Pedido! Tu mesero te lo lleva
                 </div>
@@ -199,8 +212,11 @@ function GameDetail({ game, onClose }: { game: BoardGame; onClose: () => void })
                 </button>
               )}
               {error && <p className="text-center text-xs text-danger">{error}</p>}
-              {!game.available && <p className="text-center text-xs text-muted">Este juego está en uso ahora mismo.</p>}
-              {game.available && state.session.status !== "open" && (
+              {!game.available && <p className="text-center text-xs text-muted">Este juego no está disponible por ahora.</p>}
+              {game.available && game.in_use && !game.mine && (
+                <p className="text-center text-xs text-muted">Otra mesa lo está usando. Prueba con otro mientras se libera.</p>
+              )}
+              {game.available && !game.in_use && state.session.status !== "open" && (
                 <p className="text-center text-xs text-muted">Podrás pedirlo cuando tu mesa esté activa.</p>
               )}
             </div>

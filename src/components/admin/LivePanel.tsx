@@ -2,21 +2,32 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BellRing, Check, Dices, Footprints, Gift, Smartphone, Volume2, VolumeX, X } from "lucide-react";
-import type { OverviewRequest, OverviewTable } from "@/lib/admin";
+import { BellRing, Check, Dices, Footprints, Gift, Receipt, Smartphone, Sparkles, Undo2, Volume2, VolumeX, X } from "lucide-react";
+import type { OverviewLoan, OverviewRequest, OverviewTable } from "@/lib/admin";
 import { timeAgo } from "@/components/mesa/RequestStatus";
+import { PushToggle } from "./PushToggle";
 
 interface Overview {
   tables: OverviewTable[];
   active: OverviewRequest[];
   recent: OverviewRequest[];
+  loans: OverviewLoan[];
 }
 
 const TYPE: Record<OverviewRequest["type"], { label: string; icon: React.ReactNode; cls: string }> = {
   waiter: { label: "Llama al mesero", icon: <BellRing size={20} />, cls: "bg-brand text-brand-ink" },
   boardgame: { label: "Pide un juego", icon: <Dices size={20} />, cls: "bg-info/20 text-info" },
   prize: { label: "Ganó un premio", icon: <Gift size={20} />, cls: "bg-ok/20 text-ok" },
+  bill: { label: "Pide la cuenta", icon: <Receipt size={20} />, cls: "bg-cream text-ink" },
+  promo: { label: "Quiere una recomendación", icon: <Sparkles size={20} />, cls: "bg-brand/20 text-brand" },
 };
+
+/** Texto principal de la alerta según su tipo. */
+function detail(r: OverviewRequest): string | null {
+  if (r.type === "boardgame") return r.game_name;
+  if (r.type === "bill") return r.payment_method ? `Pagará con ${r.payment_method}` : null;
+  return r.message;
+}
 
 const SOUND_KEY = "hr-panel-sonido";
 
@@ -140,6 +151,15 @@ export function LivePanel() {
     load();
   }
 
+  async function returnGame(gameId: number) {
+    await fetch(`/api/admin/boardgames/${gameId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "return" }),
+    });
+    load();
+  }
+
   async function tableAction(id: number, action: string) {
     const res = await fetch(`/api/admin/tables/${id}`, {
       method: "POST",
@@ -166,13 +186,16 @@ export function LivePanel() {
           <span className={`size-2 rounded-full ${connected ? "bg-ok" : "bg-danger"}`} />
           {connected ? "Conectado" : "Reconectando…"}
         </span>
-        <button
-          onClick={toggle}
-          className={`ml-auto inline-flex items-center gap-2 px-4 py-2 text-sm ${enabled ? "btn-ghost" : "btn-brand pulse-ring"}`}
-        >
-          {enabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-          {enabled ? "Sonido activado" : "Activar sonido"}
-        </button>
+        <div className="ml-auto flex flex-wrap items-start justify-end gap-2">
+          <PushToggle />
+          <button
+            onClick={toggle}
+            className={`inline-flex items-center gap-2 px-4 py-2 text-sm ${enabled ? "btn-ghost" : "btn-brand pulse-ring"}`}
+          >
+            {enabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+            {enabled ? "Sonido activado" : "Activar sonido"}
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.25fr_1fr]">
@@ -211,9 +234,7 @@ export function LivePanel() {
                     <span className={`grid size-8 place-items-center rounded-lg ${TYPE[r.type].cls}`}>{TYPE[r.type].icon}</span>
                     {TYPE[r.type].label}
                   </p>
-                  {(r.game_name || r.message) && (
-                    <p className="mt-1 text-lg leading-snug">{r.type === "boardgame" ? r.game_name : r.message}</p>
-                  )}
+                  {detail(r) && <p className="mt-1 text-lg leading-snug">{detail(r)}</p>}
                   <p className="text-xs text-muted">
                     {timeAgo(r.created_at)}
                     {r.status === "attending" && ` · en camino${r.handled_by_name ? ` (${r.handled_by_name})` : ""}`}
@@ -229,7 +250,7 @@ export function LivePanel() {
                     </button>
                   )}
                   <button onClick={() => setRequest(r.id, "done")} className="btn-brand inline-flex items-center gap-2 px-4 py-2.5 text-sm">
-                    <Check size={16} /> {r.type === "prize" ? "Entregado" : "Listo"}
+                    <Check size={16} /> {r.type === "prize" || r.type === "boardgame" ? "Entregado" : "Listo"}
                   </button>
                 </div>
               </article>
@@ -249,7 +270,7 @@ export function LivePanel() {
                     <span className="w-16 font-semibold">Mesa {r.table_number}</span>
                     <span className="flex-1 truncate text-muted">
                       {TYPE[r.type].label}
-                      {r.game_name ? ` · ${r.game_name}` : r.message ? ` · ${r.message}` : ""}
+                      {detail(r) ? ` · ${detail(r)}` : ""}
                     </span>
                     <span className="text-xs text-muted">{r.status === "cancelled" ? "Descartada" : r.handled_by_name ?? ""}</span>
                   </li>
@@ -261,6 +282,30 @@ export function LivePanel() {
 
         {/* ---------- Mesas ---------- */}
         <section>
+          {data.loans.length > 0 && (
+            <div className="mb-6">
+              <h2 className="mb-3 flex items-center gap-2 font-semibold">
+                <Dices size={18} className="text-info" /> Juegos prestados
+              </h2>
+              <ul className="divide-y divide-line rounded-2xl border border-line">
+                {data.loans.map((l) => (
+                  <li key={l.game_id} className="flex items-center gap-3 px-4 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{l.game_name}</p>
+                      <p className="text-xs text-muted">
+                        Mesa {l.table_number}
+                        {l.area ? ` · ${l.area}` : ""} · {timeAgo(l.since)}
+                      </p>
+                    </div>
+                    <button onClick={() => returnGame(l.game_id)} className="btn-ghost inline-flex items-center gap-1.5 px-3 py-2 text-sm">
+                      <Undo2 size={15} /> Devuelto
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1.5 text-xs text-muted">Al cerrar una mesa, sus juegos se marcan como devueltos solos.</p>
+            </div>
+          )}
           <h2 className="mb-3 font-semibold">Mesas</h2>
           <div className="mb-3 flex flex-wrap gap-3 text-xs text-muted">
             <Legend cls="bg-surface-2 border-line" label="Libre" />

@@ -1,6 +1,8 @@
 import "server-only";
 import { q, q1, tx, type Db } from "./db";
 import { emit } from "./events";
+import { activePromos } from "./promos";
+import { notifyStaff } from "./push";
 import {
   parseSettings,
   type MesaRequest,
@@ -91,6 +93,12 @@ export async function closeSession(sessionId: number) {
       [sessionId],
       c,
     );
+    // La mesa se fue: los juegos que tenía vuelven a estar disponibles.
+    await q(
+      "UPDATE board_games SET in_use_session_id = NULL, in_use_since = NULL WHERE in_use_session_id = $1",
+      [sessionId],
+      c,
+    );
     return s.restaurant_id;
   });
   if (restaurantId) {
@@ -135,8 +143,15 @@ export async function createSession(table: TableRow, status: "pending" | "open")
     [table.restaurant_id, table.id, status],
   );
   if (created) {
-    // Una mesa esperando aprobación hace sonar el panel.
+    // Una mesa esperando aprobación hace sonar el panel y avisa al celular del mesero.
     emit(table.restaurant_id, "tables", status === "pending");
+    if (status === "pending") {
+      notifyStaff(table.restaurant_id, {
+        title: `Mesa ${table.number} quiere conectarse`,
+        body: "Confirma en el panel que hay clientes en la mesa.",
+        tag: `mesa-${table.id}`,
+      });
+    }
     return created;
   }
   const existing = await q1<SessionRow>(
@@ -179,7 +194,8 @@ export async function lastRewardPlay(sessionId: number): Promise<RewardResult | 
 
 export function sessionRequests(sessionId: number): Promise<MesaRequest[]> {
   return q<MesaRequest>(
-    `SELECT r.id, r.type, r.status, r.message, r.board_game_id, g.name AS game_name, r.created_at
+    `SELECT r.id, r.type, r.status, r.message, r.board_game_id, g.name AS game_name,
+            r.payment_method, r.promo_id, r.created_at
      FROM requests r LEFT JOIN board_games g ON g.id = r.board_game_id
      WHERE r.session_id = $1 ORDER BY r.id DESC LIMIT 15`,
     [sessionId],
@@ -193,10 +209,11 @@ export async function buildMesaState(ctx: {
 }): Promise<MesaState> {
   const settings = parseSettings(ctx.restaurant.settings);
   const games = enabledGames(settings);
-  const [prizes, last, requests] = await Promise.all([
+  const [prizes, last, requests, promos] = await Promise.all([
     availablePrizes(ctx.restaurant.id),
     lastRewardPlay(ctx.session.id),
     sessionRequests(ctx.session.id),
+    activePromos(ctx.restaurant.id),
   ]);
   return {
     restaurant: {
@@ -216,5 +233,6 @@ export async function buildMesaState(ctx: {
     },
     requests,
     waiterCooldownSec: settings.waiterCooldownSec,
+    promos,
   };
 }

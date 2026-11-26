@@ -180,11 +180,11 @@ export function StatsDashboard({ businessName }: { businessName: string }) {
             </Card>
           )}
 
-          <Card title="Horas pico" sub="Llamadas al mesero y juegos pedidos, por hora del día (hora del café)">
+          <Card title="Horas pico" sub="Solicitudes al personal (llamadas, juegos, cuentas y recomendaciones) por hora del día (hora del café)">
             <HourChart hourly={data.hourly} />
           </Card>
 
-          <div className="grid gap-6 lg:grid-cols-3">
+          <div className="grid gap-6 lg:grid-cols-2">
             <Card title="Juegos más pedidos">
               <RankedBars
                 unit="pedidos"
@@ -204,6 +204,13 @@ export function StatsDashboard({ businessName }: { businessName: string }) {
                 unit="entregados"
                 empty="Nadie ha ganado premios en este periodo."
                 rows={data.prizes.map((p) => ({ label: p.name, value: p.n }))}
+              />
+            </Card>
+            <Card title="Recomendaciones más pedidas">
+              <RankedBars
+                unit="pedidas"
+                empty="Nadie ha pedido recomendaciones en este periodo."
+                rows={data.topPromos.map((p) => ({ label: p.name, value: p.n }))}
               />
             </Card>
           </div>

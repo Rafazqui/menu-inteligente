@@ -130,9 +130,8 @@ export default function MeseroPage() {
                 key={q}
                 type="button"
                 onClick={() => setMessage(q)}
-                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                  message === q ? "border-brand bg-brand/15 text-brand" : "border-line text-muted"
-                }`}
+                className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${message === q ? "border-brand bg-brand/15 text-brand" : "border-line text-muted"
+                  }`}
               >
                 {q}
               </button>
@@ -145,13 +144,16 @@ export default function MeseroPage() {
             type="button"
             onClick={call}
             disabled={disabled}
-            className={`grid size-44 place-items-center rounded-full bg-brand text-brand-ink shadow-[0_0_60px_-10px_rgb(255_199_44/0.6)] transition-transform active:scale-95 disabled:opacity-40 ${
-              !disabled ? "pulse-ring" : ""
-            }`}
+            className={`grid size-[max(13rem,min(17rem,56vw,32vh))] place-items-center rounded-full bg-brand text-brand-ink shadow-[0_0_60px_-10px_rgb(255_199_44/0.6)] transition-transform active:scale-95 disabled:opacity-40 ${!disabled ? "pulse-ring" : ""
+              }`}
           >
-            <span className="flex flex-col items-center gap-2">
-              {sent ? <Check size={52} className="grow-in" /> : <BellRing size={52} />}
-              <span className="font-bold text-lg leading-tight text-center px-6">
+            <span className="flex flex-col items-center gap-[max(0.25rem,min(0.5rem,1.2vh))]">
+              {sent ? (
+                <Check size={52} className="grow-in size-[max(2.5rem,min(4.25rem,15vw,8.5vh))]" />
+              ) : (
+                <BellRing size={52} className="size-[max(2.5rem,min(4.25rem,15vw,8.5vh))]" />
+              )}
+              <span className="px-[12%] text-center text-[max(1.05rem,min(1.4rem,5.5vw,2.9vh))] font-bold leading-tight">
                 {sent ? "¡Avisado!" : message ? "Enviar" : "Llamar"}
               </span>
             </span>

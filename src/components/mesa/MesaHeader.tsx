@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { useMesa } from "./MesaProvider";
+import LoadingTresPuntos from "../Loading/LoadingTresPuntos";
 
 export function MesaHeader({ title, back = true }: { title?: string; back?: boolean }) {
   const { state } = useMesa();
@@ -40,11 +41,7 @@ export function PendingBanner() {
   if (state.session.status !== "pending") return null;
   return (
     <div className="card border-brand/40 p-4 flex items-center gap-3 pop-in">
-      <div className="flex gap-1 shrink-0" aria-hidden>
-        <span className="dot size-2 rounded-full bg-brand" />
-        <span className="dot size-2 rounded-full bg-brand [animation-delay:0.15s]" />
-        <span className="dot size-2 rounded-full bg-brand [animation-delay:0.3s]" />
-      </div>
+      <LoadingTresPuntos />
       <p className="text-sm">
         <span className="font-semibold">Conectando tu mesa…</span>{" "}
         <span className="text-muted">Tu mesero la activará en un momento. Mientras, puedes ver el menú, la ludoteca y jugar.</span>
